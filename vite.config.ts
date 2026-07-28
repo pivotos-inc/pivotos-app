@@ -23,6 +23,8 @@ export default defineConfig(({ mode }) => {
         // 移动端多端登录命名空间（auth Starter 多账号体系，S16 接入）
         '/app': { target: apiTarget, changeOrigin: true },
         '/mini': { target: apiTarget, changeOrigin: true },
+        // file Plugin 预签名（S16 接入）
+        '/file': { target: apiTarget, changeOrigin: true },
       },
     },
   };

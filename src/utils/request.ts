@@ -54,12 +54,14 @@ export class ServiceError extends Error {
  * - H5：空串相对路径，开发经 vite.config.ts 代理、生产由 Nginx 反代
  * - 小程序 / App：直连 VITE_API_BASE_URL（小程序需配置服务器域名白名单）
  */
-// #ifdef H5
-export const API_BASE_URL = '';
-// #endif
-// #ifndef H5
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
-// #endif
+function resolveApiBaseUrl(): string {
+  let url = '';
+  // #ifndef H5
+  url = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+  // #endif
+  return url;
+}
+export const API_BASE_URL = resolveApiBaseUrl();
 
 /** 登录失效跳转重入锁（并发 401 只跳一次） */
 let relogining = false;

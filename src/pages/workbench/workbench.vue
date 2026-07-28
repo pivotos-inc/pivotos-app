@@ -1,67 +1,137 @@
 <template>
-  <view class="page">
-    <wd-notice-bar
-      text="PivotOS 移动端工程基座（S15）：工作台宫格与待办于 S16 接入后端菜单"
-      type="primary"
-    />
-    <view class="card">
-      <text class="card-title">工程基座自检</text>
-      <wd-cell-group border>
-        <wd-cell title="运行平台" :value="platform" />
-        <wd-cell title="设备型号" :value="device" />
-        <wd-cell title="登录状态" :value="userStore.isLoggedIn ? '已登录' : '未登录'" />
-      </wd-cell-group>
+  <view class="workbench-page">
+    <!-- 通知横幅：有未读时展示，点击进消息中心 -->
+    <view v-if="unread > 0" class="notice-banner" @click="goNotice">
+      <text class="banner-text">你有 {{ unread }} 条未读消息</text>
+      <text class="banner-arrow">›</text>
     </view>
-    <view class="actions">
-      <wd-button type="primary" plain @click="go('/pages/notice/notice')">消息（占位）</wd-button>
-      <wd-button type="primary" plain @click="go('/pages/mine/mine')">我的（占位）</wd-button>
-      <wd-button plain @click="go('/pages-sub/demo/demo')">分包示例</wd-button>
-      <wd-button plain @click="go('/pages-gen/demo/demo')">生成器分包示例</wd-button>
+
+    <!-- 宫格菜单：后端按角色 + device 下发 -->
+    <view class="section-title">应用</view>
+    <view v-if="items.length > 0" class="grid">
+      <view v-for="item in items" :key="item.id" class="grid-item" @click="openItem(item)">
+        <view class="grid-icon">
+          <text class="grid-icon-text">{{ iconText(item) }}</text>
+        </view>
+        <text class="grid-name">{{ item.menuName }}</text>
+      </view>
     </view>
+    <wd-status-tip v-else-if="loaded" image="content" tip="暂无可用应用" />
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { PLATFORM } from '@/utils/platform';
-import { useAppStore } from '@/store/app';
-import { useUserStore } from '@/store/user';
+import { ref } from 'vue';
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app';
+import { getWorkbenchItems, type WorkbenchItem } from '@/api/workbench';
+import { unreadCount } from '@/api/message';
 
-const appStore = useAppStore();
-const userStore = useUserStore();
-const platform = ref(PLATFORM);
-const device = computed(() => appStore.systemInfo?.model || '-');
+const items = ref<WorkbenchItem[]>([]);
+const unread = ref(0);
+const loaded = ref(false);
 
-onMounted(() => {
-  appStore.initSystemInfo();
-});
+async function loadData() {
+  try {
+    const [grid, count] = await Promise.all([
+      getWorkbenchItems(),
+      unreadCount().catch(() => 0),
+    ]);
+    items.value = grid;
+    unread.value = Number(count) || 0;
+    // 消息 tab 角标同步
+    if (unread.value > 0) {
+      uni.setTabBarBadge({ index: 1, text: String(unread.value) });
+    } else {
+      uni.removeTabBarBadge({ index: 1 });
+    }
+  } finally {
+    loaded.value = true;
+    uni.stopPullDownRefresh();
+  }
+}
 
-function go(url: string) {
-  uni.navigateTo({ url });
+onShow(loadData);
+onPullDownRefresh(loadData);
+
+/** 图标槽位：后端 icon 字段预留语义，一期用文字首字符占位（图标体系 P2 定） */
+function iconText(item: WorkbenchItem): string {
+  return item.menuName?.slice(0, 1) || '·';
+}
+
+function openItem(item: WorkbenchItem) {
+  if (!item.path) return;
+  // tabBar 页面必须 switchTab，其余 navigateTo
+  const tabPages = ['/pages/workbench/workbench', '/pages/notice/notice', '/pages/mine/mine'];
+  if (tabPages.includes(item.path)) {
+    uni.switchTab({ url: item.path });
+  } else {
+    uni.navigateTo({ url: item.path });
+  }
+}
+
+function goNotice() {
+  uni.switchTab({ url: '/pages/notice/notice' });
 }
 </script>
 
 <style scoped>
-.page {
-  padding-bottom: 48rpx;
+.workbench-page {
+  min-height: 100vh;
+  padding: 24rpx 32rpx;
+  box-sizing: border-box;
 }
-.card {
-  margin: 24rpx;
-  padding: 32rpx;
-  background: #fff;
+.notice-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 28rpx;
+  margin-bottom: 32rpx;
+  background: #fdf6ec;
+  border: 1rpx solid #f5c97b;
   border-radius: 16rpx;
 }
-.card-title {
-  display: block;
-  margin-bottom: 24rpx;
+.banner-text {
+  font-size: 26rpx;
+  color: #b88230;
+}
+.banner-arrow {
   font-size: 32rpx;
+  color: #b88230;
+}
+.section-title {
+  font-size: 28rpx;
   font-weight: 600;
   color: #2c405a;
+  margin-bottom: 24rpx;
 }
-.actions {
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+.grid-item {
+  width: 25%;
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
-  margin: 32rpx 24rpx 0;
+  align-items: center;
+  margin-bottom: 40rpx;
+}
+.grid-icon {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 24rpx;
+  background: #eef3fe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12rpx;
+}
+.grid-icon-text {
+  font-size: 40rpx;
+  color: #4d80f0;
+  font-weight: 600;
+}
+.grid-name {
+  font-size: 24rpx;
+  color: #333;
 }
 </style>

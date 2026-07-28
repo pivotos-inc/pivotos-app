@@ -64,5 +64,33 @@
 		"navigationBarTitleText": "PivotOS",
 		"navigationBarBackgroundColor": "#F8F8F8",
 		"backgroundColor": "#F8F8F8"
+	},
+	// tabBar（S16）：图标为本地 PNG（微信只认本地图片，不支持 iconfont），
+	// 选中色与 wot-design-uni 主色 #4D80F0 对齐
+	"tabBar": {
+		"color": "#999999",
+		"selectedColor": "#4D80F0",
+		"backgroundColor": "#FFFFFF",
+		"borderStyle": "black",
+		"list": [
+			{
+				"pagePath": "pages/workbench/workbench",
+				"text": "工作台",
+				"iconPath": "static/tabbar/workbench.png",
+				"selectedIconPath": "static/tabbar/workbench-active.png"
+			},
+			{
+				"pagePath": "pages/notice/notice",
+				"text": "消息",
+				"iconPath": "static/tabbar/notice.png",
+				"selectedIconPath": "static/tabbar/notice-active.png"
+			},
+			{
+				"pagePath": "pages/mine/mine",
+				"text": "我的",
+				"iconPath": "static/tabbar/mine.png",
+				"selectedIconPath": "static/tabbar/mine-active.png"
+			}
+		]
 	}
 }
