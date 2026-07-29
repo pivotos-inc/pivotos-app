@@ -4,9 +4,9 @@
     <view class="user-card">
       <view class="avatar-wrap" @click="onChangeAvatar">
         <image
-          v-if="userStore.userInfo?.avatar"
+          v-if="avatarDisplayUrl"
           class="avatar"
-          :src="String(userStore.userInfo.avatar)"
+          :src="avatarDisplayUrl"
           mode="aspectFill"
         />
         <view v-else class="avatar avatar-placeholder">
@@ -46,17 +46,37 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useUserStore } from '@/store/user';
 import { getInfo, logout } from '@/api/auth';
 import { updateProfile, changePassword } from '@/api/profile';
-import { chooseAndUploadImage } from '@/api/file';
+import { chooseAndUploadImage, presignDownload } from '@/api/file';
 
 const userStore = useUserStore();
 
 const nicknameInitial = computed(() =>
   String(userStore.userInfo?.nickname || userStore.userInfo?.username || '·').slice(0, 1),
 );
+
+/**
+ * 头像展示 URL：落库为完整 fileUrl（私有桶直连 403），
+ * 用 presignDownload 换取限时可访问 URL；换取失败回落首字占位。
+ */
+const avatarDisplayUrl = ref('');
+
+async function resolveAvatar(avatar?: string): Promise<void> {
+  if (!avatar) {
+    avatarDisplayUrl.value = '';
+    return;
+  }
+  try {
+    avatarDisplayUrl.value = await presignDownload(avatar);
+  } catch {
+    avatarDisplayUrl.value = '';
+  }
+}
+
+watch(() => userStore.userInfo?.avatar, resolveAvatar, { immediate: true });
 
 /** 头像直传：选图 → presign → PUT MinIO → 回写资料 → 刷新本地用户信息 */
 async function onChangeAvatar() {

@@ -1,0 +1,8 @@
+# pnpm 11 配置文件（本工程为单包，不声明 packages）。
+# 允许以下依赖执行安装期构建脚本，否则 esbuild 等二进制缺失导致 vite 无法启动。
+allowBuilds:
+  '@parcel/watcher': true
+  core-js: true
+  core-js-pure: true
+  esbuild: true
+  vue-demi: true
