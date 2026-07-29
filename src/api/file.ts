@@ -62,6 +62,29 @@ function putToStorage(uploadUrl: string, buffer: ArrayBuffer, contentType: strin
 }
 
 /**
+ * 从选图结果解析扩展名（白名单内才返回，否则回落 png）：
+ * - 优先文件路径后缀（小程序/App 临时路径通常带后缀）
+ * - H5 的 blob: URL 无后缀，退用 tempFiles[0].name / MIME type
+ */
+function resolveImageExt(chosen: UniApp.ChooseImageSuccessCallbackResult, filePath: string): string {
+  const WHITELIST = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+  const fromPath = filePath.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+  if (WHITELIST.includes(fromPath)) {
+    return fromPath;
+  }
+  const file = (chosen.tempFiles as unknown as Array<{ name?: string; type?: string }> | undefined)?.[0];
+  const fromName = file?.name?.split('.').pop()?.toLowerCase() ?? '';
+  if (WHITELIST.includes(fromName)) {
+    return fromName;
+  }
+  const fromMime = file?.type?.split('/').pop()?.toLowerCase() ?? '';
+  if (WHITELIST.includes(fromMime)) {
+    return fromMime;
+  }
+  return 'png';
+}
+
+/**
  * 选择并直传一张图片，返回可访问的 fileUrl
  * @param dirname 语义化文件名前缀（仅影响对象键可读部分）
  */
@@ -71,7 +94,7 @@ export async function chooseAndUploadImage(dirname = 'image'): Promise<string> {
   if (!filePath) {
     throw new Error('未选择图片');
   }
-  const ext = filePath.split('.').pop()?.toLowerCase() || 'png';
+  const ext = resolveImageExt(chosen, filePath);
   const sign = await presign(`${dirname}.${ext}`);
   const buffer = await readFileBuffer(filePath);
   await putToStorage(sign.uploadUrl, buffer, `image/${ext === 'jpg' ? 'jpeg' : ext}`);

@@ -8,6 +8,16 @@ export default defineConfig(({ mode }) => {
   const apiTarget = env.VITE_API_BASE_URL || 'http://localhost:8080';
   return {
     plugins: [uni()],
+    css: {
+      preprocessorOptions: {
+        scss: {
+          // wot-design-uni 1.x 仍是 legacy Sass API（@import/全局函数），
+          // Dart Sass 1.79+ 每条都会刷 DEPRECATION WARNING；此处静默（不影响编译结果），
+          // 组件库升级到 modern API 后可移除。
+          silenceDeprecations: ['legacy-js-api', 'import', 'global-builtin', 'color-functions'],
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

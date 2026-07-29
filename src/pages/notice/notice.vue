@@ -12,7 +12,7 @@
     <view v-if="list.length > 0" class="msg-list">
       <view
         v-for="msg in list"
-        :key="msg.id"
+        :key="msg.userMessageId"
         class="msg-item"
         :class="{ unread: msg.readStatus === 0 }"
         @click="openMessage(msg)"
@@ -84,11 +84,19 @@ function onTabChange() {
   load(true);
 }
 
-/** 点开即已读（未读才调接口） */
+/** 点开即已读（未读才调接口）；未读 tab 下已读条目即时移出列表 */
 async function openMessage(msg: UserMessage) {
   if (msg.readStatus === 0) {
-    msg.readStatus = 1;
-    markRead(msg.id).catch(() => {});
+    try {
+      await markRead(msg.userMessageId);
+      msg.readStatus = 1;
+      if (tab.value === '0') {
+        list.value = list.value.filter((m) => m.userMessageId !== msg.userMessageId);
+        total.value = Math.max(0, total.value - 1);
+      }
+    } catch {
+      // request 层已 toast，条目不改动
+    }
   }
   uni.showModal({
     title: msg.title,
@@ -98,9 +106,17 @@ async function openMessage(msg: UserMessage) {
 }
 
 async function onReadAll() {
-  const count = await markAllRead().catch(() => 0);
-  uni.showToast({ title: count > 0 ? `已读 ${count} 条` : '没有未读消息', icon: 'none' });
-  load(true);
+  try {
+    const count = await markAllRead();
+    uni.showToast({ title: count > 0 ? `已读 ${count} 条` : '没有未读消息', icon: 'none' });
+    // 未读 tab 下先即时清空（不等回表），再回源拉取对齐服务端状态
+    if (tab.value === '0') {
+      list.value = [];
+    }
+  } catch {
+    // 失败时 request 层已 toast，列表保持原样并回源一次以呈现真实状态
+  }
+  await load(true);
 }
 
 function formatTime(time?: string): string {

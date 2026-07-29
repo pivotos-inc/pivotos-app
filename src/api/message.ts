@@ -5,7 +5,8 @@
 import { get, put } from '@/utils/request';
 
 export interface UserMessage {
-  id: string;
+  /** 注意：后端 MessageDTO 的主键字段是 userMessageId（不是 id） */
+  userMessageId: string;
   title: string;
   content: string;
   msgType?: string;
