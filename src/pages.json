@@ -1,0 +1,96 @@
+{
+	// easycom：wot-design-uni 组件自动引入（^wd-*），业务页面无需手动 import
+	"easycom": {
+		"autoscan": true,
+		"custom": {
+			"^wd-(.*)": "wot-design-uni/components/wd-$1/wd-$1.vue"
+		}
+	},
+	// pages 数组中第一项为应用启动页
+	// 主包纪律：仅放登录/工作台/消息/我的等基座页面，业务页面一律进分包（《05》第一节步骤 2.4）
+	"pages": [
+		{
+			"path": "pages/login/login",
+			"style": {
+				"navigationBarTitleText": "登录"
+			}
+		},
+		{
+			"path": "pages/workbench/workbench",
+			"style": {
+				"navigationBarTitleText": "工作台"
+			}
+		},
+		{
+			"path": "pages/notice/notice",
+			"style": {
+				"navigationBarTitleText": "消息"
+			}
+		},
+		{
+			"path": "pages/mine/mine",
+			"style": {
+				"navigationBarTitleText": "我的"
+			}
+		}
+	],
+	// 分包策略：pages-sub 放业务模块（控制主包 ≤ 2M）；pages-gen 为代码生成器产物专属分包
+	"subPackages": [
+		{
+			"root": "pages-sub",
+			"pages": [
+				{
+					"path": "demo/demo",
+					"style": {
+						"navigationBarTitleText": "分包示例"
+					}
+				}
+			]
+		},
+		{
+			"root": "pages-gen",
+			"pages": [
+				{
+					"path": "demo/demo",
+					"style": {
+						"navigationBarTitleText": "生成器示例"
+					}
+				}
+			]
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "PivotOS",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8"
+	},
+	// tabBar（S16）：图标为本地 PNG（微信只认本地图片，不支持 iconfont），
+	// 选中色与 wot-design-uni 主色 #4D80F0 对齐
+	"tabBar": {
+		"color": "#999999",
+		"selectedColor": "#4D80F0",
+		"backgroundColor": "#FFFFFF",
+		"borderStyle": "black",
+		"list": [
+			{
+				"pagePath": "pages/workbench/workbench",
+				"text": "工作台",
+				"iconPath": "static/tabbar/workbench.png",
+				"selectedIconPath": "static/tabbar/workbench-active.png"
+			},
+			{
+				"pagePath": "pages/notice/notice",
+				"text": "消息",
+				"iconPath": "static/tabbar/notice.png",
+				"selectedIconPath": "static/tabbar/notice-active.png"
+			},
+			{
+				"pagePath": "pages/mine/mine",
+				"text": "我的",
+				"iconPath": "static/tabbar/mine.png",
+				"selectedIconPath": "static/tabbar/mine-active.png"
+			}
+		]
+	}
+}
