@@ -21,6 +21,15 @@ export function presign(filename: string): Promise<PresignResult> {
   return get<PresignResult>('/file/presign', { filename });
 }
 
+/**
+ * 预签名下载地址（GET，私有桶回显）。
+ * 后端桶为私有，落库的 fileUrl 直连会 403，展示前用本接口换取限时 URL。
+ * @param key 对象键，或历史落库的完整 fileUrl（后端统一归一化）
+ */
+export function presignDownload(key: string): Promise<string> {
+  return get<string>('/file/presign-download', { key }, { silent: true });
+}
+
 /** 读本地文件为 ArrayBuffer（小程序/App 走文件系统，H5 走 fetch） */
 function readFileBuffer(filePath: string): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
