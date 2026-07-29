@@ -37,6 +37,7 @@ import {
   pageMessages,
   markRead,
   markAllRead,
+  unreadCount,
   type UserMessage,
 } from '@/api/message';
 
@@ -84,6 +85,17 @@ function onTabChange() {
   load(true);
 }
 
+/** 同步 tabbar 消息角标（与工作台 index=1 对应） */
+async function refreshBadge() {
+  const n = await unreadCount().catch(() => -1);
+  if (n < 0) return;
+  if (n > 0) {
+    uni.setTabBarBadge({ index: 1, text: String(n) });
+  } else {
+    uni.removeTabBarBadge({ index: 1 });
+  }
+}
+
 /** 点开即已读（未读才调接口）；未读 tab 下已读条目即时移出列表 */
 async function openMessage(msg: UserMessage) {
   if (msg.readStatus === 0) {
@@ -94,6 +106,7 @@ async function openMessage(msg: UserMessage) {
         list.value = list.value.filter((m) => m.userMessageId !== msg.userMessageId);
         total.value = Math.max(0, total.value - 1);
       }
+      refreshBadge();
     } catch {
       // request 层已 toast，条目不改动
     }
@@ -113,6 +126,7 @@ async function onReadAll() {
     if (tab.value === '0') {
       list.value = [];
     }
+    refreshBadge();
   } catch {
     // 失败时 request 层已 toast，列表保持原样并回源一次以呈现真实状态
   }
