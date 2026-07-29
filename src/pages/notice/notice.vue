@@ -81,7 +81,10 @@ onShow(() => load(true));
 onPullDownRefresh(() => load(true));
 onReachBottom(loadMore);
 
-function onTabChange() {
+function onTabChange(e: { name: string | number; index: number }) {
+  // wd-tabs 的 change 先于 update:modelValue 触发（组件内先 emit('change') 再
+  // emit('update:modelValue')），此处直接用事件携带的新值，否则 readStatus 滞后一拍
+  tab.value = String(e.name);
   load(true);
 }
 
