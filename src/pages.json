@@ -44,6 +44,12 @@
 					"style": {
 						"navigationBarTitleText": "分包示例"
 					}
+				},
+				{
+					"path": "ai/chat",
+					"style": {
+						"navigationBarTitleText": "AI 助手"
+					}
 				}
 			]
 		},
