@@ -12,6 +12,7 @@ import {
   miniLogin,
   miniPhoneLogin,
 } from '@/api/auth';
+import { setToken, clearAuth } from '@/utils/auth';
 import { useUserStore } from '@/store/user';
 import { ServiceError } from '@/utils/request';
 
@@ -19,10 +20,19 @@ export function useLogin() {
   const userStore = useUserStore();
   const submitting = ref(false);
 
-  /** 登录成功公共收尾：取用户信息、写凭证、进工作台 */
+  /** 登录成功公共收尾：先落 token 再取用户信息、写凭证、进工作台 */
   async function afterLogin(token: string): Promise<void> {
-    const info = await getInfo();
-    userStore.setAuth(token, info.user);
+    // 必须先写 token：getInfo 靠请求封装从 storage 取 Authorization 头；
+    // 旧序先 getInfo 后写，实际靠 Sa-Token 登录下发的 Cookie 兜底才通过鉴权，
+    // 后端关闭 is-read-cookie 后（S23 坑 2 修复）该隐藏依赖暴露为 1002
+    setToken(token);
+    try {
+      const info = await getInfo();
+      userStore.setAuth(token, info.user);
+    } catch (err) {
+      clearAuth();
+      throw err;
+    }
     uni.reLaunch({ url: '/pages/workbench/workbench' });
   }
 

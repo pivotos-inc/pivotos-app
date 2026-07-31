@@ -24,6 +24,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      // 显式固定 H5 端口：PC 端 admin 占用 5173，移动端 H5 用 5174，避免同时起时端口漂移
+      port: 5174,
       proxy: {
         // H5 开发代理到 admin-server，避免跨域（与 PC 端 admin 同策略，见《04》第五节）；
         // 小程序 / App 不经此代理，直连 import.meta.env.VITE_API_BASE_URL。
@@ -35,6 +37,8 @@ export default defineConfig(({ mode }) => {
         '/mini': { target: apiTarget, changeOrigin: true },
         // file Plugin 预签名（S16 接入）
         '/file': { target: apiTarget, changeOrigin: true },
+        // AI 对话（S22 接入；含 SSE 流式，http-proxy 对 text/event-stream 默认不缓冲）
+        '/ai': { target: apiTarget, changeOrigin: true },
       },
     },
   };
