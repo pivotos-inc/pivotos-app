@@ -30,13 +30,22 @@ const items = ref<WorkbenchItem[]>([]);
 const unread = ref(0);
 const loaded = ref(false);
 
+/** AI 助手固定入口（S22：前端内置，不占后端菜单；菜单化下发待 S23 多租户 AI 配置一并评估） */
+const AI_ENTRY: WorkbenchItem = {
+  id: 'ai-chat',
+  menuName: 'AI 助手',
+  icon: '',
+  path: '/pages-sub/ai/chat',
+  sort: 0,
+};
+
 async function loadData() {
   try {
     const [grid, count] = await Promise.all([
       getWorkbenchItems(),
       unreadCount().catch(() => 0),
     ]);
-    items.value = grid;
+    items.value = [AI_ENTRY, ...grid];
     unread.value = Number(count) || 0;
     // 消息 tab 角标同步
     if (unread.value > 0) {

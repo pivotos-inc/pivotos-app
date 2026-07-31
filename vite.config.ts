@@ -37,6 +37,8 @@ export default defineConfig(({ mode }) => {
         '/mini': { target: apiTarget, changeOrigin: true },
         // file Plugin 预签名（S16 接入）
         '/file': { target: apiTarget, changeOrigin: true },
+        // AI 对话（S22 接入；含 SSE 流式，http-proxy 对 text/event-stream 默认不缓冲）
+        '/ai': { target: apiTarget, changeOrigin: true },
       },
     },
   };
