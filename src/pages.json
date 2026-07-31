@@ -50,6 +50,12 @@
 					"style": {
 						"navigationBarTitleText": "AI 助手"
 					}
+				},
+				{
+					"path": "announcement/detail",
+					"style": {
+						"navigationBarTitleText": "公告详情"
+					}
 				}
 			]
 		},

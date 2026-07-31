@@ -6,6 +6,23 @@
       <text class="banner-arrow">›</text>
     </view>
 
+    <!-- 公告栏（S26）：最新已发布公告，点击进详情 -->
+    <view v-if="announcements.length > 0" class="announce-card">
+      <view class="section-title">通知公告</view>
+      <view
+        v-for="item in announcements"
+        :key="item.id"
+        class="announce-item"
+        @click="goAnnouncement(item)"
+      >
+        <view class="announce-tag" :class="item.noticeType === 1 ? 'is-notice' : 'is-announce'">
+          {{ item.noticeType === 1 ? '通知' : '公告' }}
+        </view>
+        <text class="announce-title">{{ item.title }}</text>
+        <text class="announce-arrow">›</text>
+      </view>
+    </view>
+
     <!-- 宫格菜单：后端按角色 + device 下发 -->
     <view class="section-title">应用</view>
     <view v-if="items.length > 0" class="grid">
@@ -25,10 +42,12 @@ import { ref } from 'vue';
 import { onShow, onPullDownRefresh } from '@dcloudio/uni-app';
 import { getWorkbenchItems, type WorkbenchItem } from '@/api/workbench';
 import { unreadCount } from '@/api/message';
+import { listAnnouncements, type AnnouncementItem } from '@/api/announcement';
 
 const items = ref<WorkbenchItem[]>([]);
 const unread = ref(0);
 const loaded = ref(false);
+const announcements = ref<AnnouncementItem[]>([]);
 
 /** AI 助手固定入口（S22：前端内置，不占后端菜单；菜单化下发待 S23 多租户 AI 配置一并评估） */
 const AI_ENTRY: WorkbenchItem = {
@@ -41,12 +60,14 @@ const AI_ENTRY: WorkbenchItem = {
 
 async function loadData() {
   try {
-    const [grid, count] = await Promise.all([
+    const [grid, count, notices] = await Promise.all([
       getWorkbenchItems(),
       unreadCount().catch(() => 0),
+      listAnnouncements(3).catch(() => [] as AnnouncementItem[]),
     ]);
     items.value = [AI_ENTRY, ...grid];
     unread.value = Number(count) || 0;
+    announcements.value = notices;
     // 消息 tab 角标同步
     if (unread.value > 0) {
       uni.setTabBarBadge({ index: 1, text: String(unread.value) });
@@ -81,6 +102,10 @@ function openItem(item: WorkbenchItem) {
 function goNotice() {
   uni.switchTab({ url: '/pages/notice/notice' });
 }
+
+function goAnnouncement(item: AnnouncementItem) {
+  uni.navigateTo({ url: `/pages-sub/announcement/detail?id=${item.id}` });
+}
 </script>
 
 <style scoped>
@@ -112,6 +137,46 @@ function goNotice() {
   font-weight: 600;
   color: #2c405a;
   margin-bottom: 24rpx;
+}
+.announce-card {
+  padding: 24rpx 28rpx 8rpx;
+  margin-bottom: 32rpx;
+  background: #fff;
+  border-radius: 16rpx;
+}
+.announce-item {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 0;
+  border-top: 1rpx solid #f2f3f5;
+}
+.announce-tag {
+  flex-shrink: 0;
+  padding: 2rpx 12rpx;
+  margin-right: 16rpx;
+  font-size: 20rpx;
+  border-radius: 6rpx;
+}
+.announce-tag.is-notice {
+  color: #4d80f0;
+  background: #eef3fe;
+}
+.announce-tag.is-announce {
+  color: #b88230;
+  background: #fdf6ec;
+}
+.announce-title {
+  flex: 1;
+  font-size: 26rpx;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.announce-arrow {
+  font-size: 30rpx;
+  color: #c0c4cc;
+  margin-left: 12rpx;
 }
 .grid {
   display: flex;
