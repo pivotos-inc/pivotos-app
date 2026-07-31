@@ -7,7 +7,7 @@
  * 与 request.ts 的关系等同于它对 uni.request 的使用，页面仍不裸调。
  */
 
-import { get } from '@/utils/request';
+import { get, post } from '@/utils/request';
 
 export interface PresignResult {
   objectKey: string;
@@ -16,9 +16,23 @@ export interface PresignResult {
   expireSeconds: number;
 }
 
+/** 直传完成回调登记请求（对齐后端 FileRegisterRequest） */
+export interface FileRegisterBody {
+  objectKey: string;
+  originalName?: string;
+  fileSize?: number;
+  md5?: string;
+  contentType?: string;
+}
+
 /** 预签名直传地址 */
 export function presign(filename: string): Promise<PresignResult> {
   return get<PresignResult>('/file/presign', { filename });
+}
+
+/** 直传完成回调登记（sys_file 元数据落库，S25） */
+export function registerFile(body: FileRegisterBody): Promise<string> {
+  return post<string>('/file/register', body, { silent: true });
 }
 
 /**
@@ -106,6 +120,18 @@ export async function chooseAndUploadImage(dirname = 'image'): Promise<string> {
   const ext = resolveImageExt(chosen, filePath);
   const sign = await presign(`${dirname}.${ext}`);
   const buffer = await readFileBuffer(filePath);
-  await putToStorage(sign.uploadUrl, buffer, `image/${ext === 'jpg' ? 'jpeg' : ext}`);
+  const contentType = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+  await putToStorage(sign.uploadUrl, buffer, contentType);
+  // 元数据登记（S25 sys_file）：失败不阻断主链路，头像上传零感知
+  try {
+    await registerFile({
+      objectKey: sign.objectKey,
+      originalName: `${dirname}.${ext}`,
+      fileSize: buffer.byteLength,
+      contentType,
+    });
+  } catch (err) {
+    console.warn('[PivotOS] 文件元数据登记失败（不影响上传结果）', err);
+  }
   return sign.fileUrl;
 }
