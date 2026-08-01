@@ -23,8 +23,7 @@
     <!-- 功能列表 -->
     <view class="cell-group">
       <wd-cell title="修改密码" is-link @click="pwdVisible = true" />
-      <wd-cell title="清除缓存" is-link @click="onClearCache" />
-      <wd-cell title="关于 PivotOS" is-link @click="onAbout" />
+      <wd-cell title="设置" is-link @click="openSettings" />
     </view>
 
     <view class="logout">
@@ -127,17 +126,8 @@ async function onChangePassword() {
   }
 }
 
-function onClearCache() {
-  // 只清业务缓存，不动登录凭证
-  uni.showToast({ title: '缓存已清除', icon: 'none' });
-}
-
-function onAbout() {
-  uni.showModal({
-    title: 'PivotOS',
-    content: '磐维科技 · 一码三端基座\n版本 v0.5.0（P1）',
-    showCancel: false,
-  });
+function openSettings() {
+  uni.navigateTo({ url: '/pages-sub/settings/settings' });
 }
 
 function onLogout() {
