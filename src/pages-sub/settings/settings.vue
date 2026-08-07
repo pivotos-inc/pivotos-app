@@ -11,7 +11,7 @@
       </wd-cell-group>
 
       <wd-cell-group title="关于" border>
-        <wd-cell title="关于磐维科技" is-link :clickable="true" @click="handleAbout">
+        <wd-cell title="关于枢磐科技" is-link :clickable="true" @click="handleAbout">
           <template #icon>
             <wd-icon name="info-circle" size="18px" custom-style="margin-right: 8px" />
           </template>
@@ -22,6 +22,9 @@
     <view class="version-info">
       <text class="version-text">版本 {{ versionName }}</text>
     </view>
+
+    <!-- useMessage 的弹窗宿主（S38 FIND-19 修复）：未挂载时 confirm/alert 会静默失效 -->
+    <wd-message-box />
   </view>
 </template>
 
@@ -65,12 +68,12 @@ const handleClearCache = () => {
 
 const handleAbout = () => {
   const platformName = getPlatformName()
-  const appInfo = `磐维科技 PivotOS v${versionName.value}
+  const appInfo = `枢磐科技 PivotOS v${versionName.value}
 一码三端企业管理平台
 当前平台：${platformName}`
 
   message.alert({
-    title: '关于磐维科技',
+    title: '关于枢磐科技',
     msg: appInfo,
     confirmButtonText: '知道了',
   })
