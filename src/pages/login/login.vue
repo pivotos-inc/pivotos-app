@@ -3,7 +3,7 @@
     <view class="brand">
       <image class="logo" src="/static/logo.png" mode="aspectFit" />
       <text class="app-name">PivotOS</text>
-      <text class="slogan">磐维科技 · 一码三端</text>
+      <text class="slogan">枢磐科技 · 一码三端</text>
     </view>
 
     <!-- 微信小程序：一键登录主链路；未绑定微信引导绑定 -->

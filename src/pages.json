@@ -18,13 +18,17 @@
 		{
 			"path": "pages/workbench/workbench",
 			"style": {
-				"navigationBarTitleText": "工作台"
+				"navigationBarTitleText": "工作台",
+				// 下拉刷新（S38 FIND-18 修复）：页面已实现 onPullDownRefresh，此处补齐开关
+				"enablePullDownRefresh": true
 			}
 		},
 		{
 			"path": "pages/notice/notice",
 			"style": {
-				"navigationBarTitleText": "消息"
+				"navigationBarTitleText": "消息",
+				// 下拉刷新：页面已实现 onPullDownRefresh，与工作台区保持一致
+				"enablePullDownRefresh": true
 			}
 		},
 		{
@@ -49,6 +53,18 @@
 					"path": "ai/chat",
 					"style": {
 						"navigationBarTitleText": "AI 助手"
+					}
+				},
+				{
+					"path": "announcement/detail",
+					"style": {
+						"navigationBarTitleText": "公告详情"
+					}
+				},
+				{
+					"path": "settings/settings",
+					"style": {
+						"navigationStyle": "custom"
 					}
 				}
 			]

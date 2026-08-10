@@ -1,6 +1,6 @@
 # PivotOS APP（pivotos-app）
 
-磐维科技 PivotOS uni-app 一码三端移动端（App / H5 / 微信·支付宝·抖音小程序）。
+枢磐科技 PivotOS uni-app 一码三端移动端（App / H5 / 微信·支付宝·抖音小程序）。
 
 ## 开发调试
 
