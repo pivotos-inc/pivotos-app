@@ -28,7 +28,9 @@
           <text v-if="msg.role === 'assistant' && !msg.content && streaming" class="typing">
             正在思考…
           </text>
+          <rich-text v-else-if="msg.role === 'assistant'" class="md" :nodes="msg.html || ''" />
           <text v-else user-select>{{ msg.content }}</text>
+          <text v-if="showCursor(msg, index)" class="cursor">▍</text>
         </view>
       </view>
       <!-- 底部占位，避免输入区遮挡最后一条 -->
@@ -100,10 +102,33 @@
               <text class="conv-item-title">{{ item.title }}</text>
               <text class="conv-item-time">{{ formatTime(item.updateTime) }}</text>
             </view>
+            <wd-icon name="edit-outline" size="32rpx" custom-class="conv-item-action" @click.stop="openRename(item)" />
             <wd-icon name="delete" size="32rpx" custom-class="conv-item-delete" @click.stop="handleDelete(item)" />
           </view>
           <view v-if="conversations.length === 0" class="conv-empty">暂无会话</view>
         </scroll-view>
+      </view>
+    </wd-popup>
+
+    <!-- 重命名弹窗（uni.showModal 的 editable 在 H5 兼容性不稳，自绘弹窗三端一致） -->
+    <wd-popup
+      v-model="renameVisible"
+      position="center"
+      custom-style="width: 80%; border-radius: 16rpx; padding: 32rpx; box-sizing: border-box;"
+    >
+      <view class="rename-title">重命名会话</view>
+      <input
+        v-model="renameValue"
+        class="rename-input"
+        type="text"
+        :maxlength="128"
+        placeholder="请输入会话标题"
+        focus
+        @confirm="confirmRename"
+      />
+      <view class="rename-actions">
+        <wd-button size="small" plain @click="renameVisible = false">取消</wd-button>
+        <wd-button size="small" :disabled="!renameValue.trim()" @click="confirmRename">确定</wd-button>
       </view>
     </wd-popup>
   </view>
@@ -118,17 +143,21 @@ import {
   listMessages,
   listProviderModels,
   listProviderOptions,
+  renameConversation,
   streamChat,
   type AiConversation,
   type AiProviderOption,
   type ChatStreamHandle,
 } from '@/api/ai';
+import { renderMarkdown } from '@/utils/markdown';
 
-/** 本地消息（流式追加时 assistant 消息尚无落库 id） */
+/** 本地消息（流式追加时 assistant 消息尚无落库 id；assistant 带预渲染的 markdown HTML） */
 interface LocalMessage {
   id?: string;
   role: 'user' | 'assistant';
   content: string;
+  /** assistant 消息的 rich-text nodes（renderMarkdown 产物，XSS 安全） */
+  html?: string;
 }
 
 // ---------- 会话列表 ----------
@@ -151,7 +180,12 @@ async function switchConversation(id: string): Promise<void> {
   if (streaming.value || id === activeId.value) return;
   activeId.value = id;
   const rows = await listMessages(id);
-  messages.value = rows.map((m) => ({ id: m.id, role: m.role, content: m.content }));
+  messages.value = rows.map((m) => ({
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    html: m.role === 'assistant' ? renderMarkdown(m.content) : undefined,
+  }));
   scrollToBottom();
 }
 
@@ -191,7 +225,8 @@ const providerColumns = computed(() => [
 ]);
 const modelColumns = computed(() => [
   { value: '', label: '默认模型' },
-  ...models.value.map((m) => ({ value: m, label: m })),
+  // 展示序：当前供应商最近使用置顶（recentVersion 驱动记录后即时重排）
+  ...(void recentVersion.value, pinRecentModels(providerId.value, models.value)).map((m) => ({ value: m, label: m })),
 ]);
 const providerLabel = computed(
   () => providers.value.find((p) => p.id === providerId.value)?.name ?? '默认供应商',
@@ -218,6 +253,40 @@ async function onProviderConfirm(): Promise<void> {
   } finally {
     modelsLoading.value = false;
   }
+}
+
+// ---------- 常用模型置顶（uni storage 按供应商各记最近 5 个，S45 ④口径 A） ----------
+const RECENT_MODELS_KEY = 'ai-chat-recent-models';
+const RECENT_MODELS_MAX = 5;
+/** 常用记录的响应式版本号：storage 写入不自知，记录后 +1 驱动 modelColumns 重算 */
+const recentVersion = ref(0);
+
+type RecentModelsMap = Record<string, string[]>;
+
+function loadRecentModels(): RecentModelsMap {
+  try {
+    return (uni.getStorageSync(RECENT_MODELS_KEY) || {}) as RecentModelsMap;
+  } catch {
+    return {};
+  }
+}
+
+/** 本次对话实际使用的模型落记录（仅显式选择了供应商+模型才记，空模型=默认无置顶意义） */
+function recordRecentModel(): void {
+  if (!providerId.value || !model.value) return;
+  const map = loadRecentModels();
+  map[providerId.value] = [
+    model.value,
+    ...(map[providerId.value] ?? []).filter((m) => m !== model.value),
+  ].slice(0, RECENT_MODELS_MAX);
+  uni.setStorageSync(RECENT_MODELS_KEY, map);
+  recentVersion.value += 1;
+}
+
+/** 常用置顶：当前供应商最近使用的模型（按新近度）排前，其余保持原顺序 */
+function pinRecentModels(providerKey: string, all: string[]): string[] {
+  const recent = (loadRecentModels()[providerKey] ?? []).filter((m) => all.includes(m));
+  return [...recent, ...all.filter((m) => !recent.includes(m))];
 }
 
 // ---------- 流式对话 ----------
@@ -254,10 +323,14 @@ async function handleSend(): Promise<void> {
       },
       onDelta(delta) {
         assistant.content += delta;
+        // 每个 delta 重渲染一次 HTML（增量的是字符串，rich-text 整棵替换，不断流）
+        assistant.html = renderMarkdown(assistant.content);
         scrollToBottom();
       },
       onDone(done) {
         assistant.id = done.messageId;
+        // 本次实际选用的模型计入「常用」（S45 ④）
+        recordRecentModel();
         // 会话 updateTime 变化，刷新排序
         void loadConversations();
       },
@@ -277,6 +350,38 @@ async function handleSend(): Promise<void> {
 function handleStop(): void {
   streamHandle?.abort();
   streaming.value = false;
+}
+
+/** 打字机光标：仅流式中的最后一条 assistant 消息显示（流结束 streaming=false 自动消除） */
+function showCursor(msg: LocalMessage, index: number): boolean {
+  return streaming.value && msg.role === 'assistant' && index === messages.value.length - 1;
+}
+
+// ---------- 会话重命名 ----------
+const renameVisible = ref(false);
+const renameValue = ref('');
+/** 重命名目标（弹窗打开时快照，确认时据此提交） */
+const renameTarget = ref<AiConversation | null>(null);
+
+function openRename(item: AiConversation): void {
+  renameTarget.value = item;
+  renameValue.value = item.title;
+  renameVisible.value = true;
+}
+
+async function confirmRename(): Promise<void> {
+  const title = renameValue.value.trim();
+  const target = renameTarget.value;
+  if (!title || !target) return;
+  if (title.length > 128) {
+    uni.showToast({ title: '标题最长 128 字符', icon: 'none' });
+    return;
+  }
+  renameVisible.value = false;
+  if (title === target.title) return;
+  await renameConversation(target.id, title);
+  target.title = title;
+  uni.showToast({ title: '已重命名', icon: 'none' });
 }
 
 // ---------- 滚动 ----------
@@ -382,6 +487,78 @@ onShow(() => {
 .typing {
   color: #999;
 }
+
+/* 打字机光标：流式中闪烁，流结束随 streaming=false 移除 */
+.cursor {
+  color: #4d80f0;
+  animation: cursor-blink 1s step-end infinite;
+}
+@keyframes cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* assistant markdown（rich-text 内的标签样式只能走全局/属性选择器，scoped 下用 :deep） */
+.md {
+  display: block;
+  /* 父级气泡沿用旧纯文本样式的 pre-wrap，markdown 排版需还原 */
+  white-space: normal;
+}
+:deep(.md h1),
+:deep(.md h2),
+:deep(.md h3),
+:deep(.md h4) {
+  margin: 16rpx 0 8rpx;
+  line-height: 1.4;
+}
+:deep(.md p) {
+  margin: 0 0 12rpx;
+}
+:deep(.md ul),
+:deep(.md ol) {
+  margin: 8rpx 0;
+  padding-left: 40rpx;
+}
+:deep(.md code) {
+  padding: 2rpx 8rpx;
+  border-radius: 6rpx;
+  background: #f2f3f5;
+  font-size: 24rpx;
+}
+:deep(.md pre) {
+  margin: 12rpx 0;
+  padding: 20rpx;
+  border-radius: 12rpx;
+  background: #282c34;
+  white-space: pre;
+  overflow-x: auto;
+}
+:deep(.md pre code) {
+  padding: 0;
+  background: transparent;
+  color: #e5e7eb;
+  font-size: 24rpx;
+}
+:deep(.md table) {
+  margin: 12rpx 0;
+  border-collapse: collapse;
+  font-size: 24rpx;
+}
+:deep(.md th),
+:deep(.md td) {
+  padding: 8rpx 16rpx;
+  border: 1rpx solid #ebedf0;
+}
+:deep(.md th) {
+  background: #f5f6fa;
+}
+:deep(.md blockquote) {
+  margin: 12rpx 0;
+  padding: 8rpx 20rpx;
+  border-left: 6rpx solid #dcdfe6;
+  color: #666;
+}
 .messages-bottom {
   height: 24rpx;
 }
@@ -477,6 +654,10 @@ onShow(() => {
   font-size: 22rpx;
   color: #999;
 }
+:deep(.conv-item-action) {
+  color: #c0c4cc;
+  margin-right: 16rpx;
+}
 :deep(.conv-item-delete) {
   color: #c0c4cc;
 }
@@ -485,5 +666,27 @@ onShow(() => {
   text-align: center;
   font-size: 26rpx;
   color: #999;
+}
+
+/* ---------- 重命名弹窗 ---------- */
+.rename-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #2c405a;
+  margin-bottom: 24rpx;
+}
+.rename-input {
+  height: 72rpx;
+  padding: 0 24rpx;
+  background: #f5f6fa;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  box-sizing: border-box;
+}
+.rename-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+  margin-top: 24rpx;
 }
 </style>
