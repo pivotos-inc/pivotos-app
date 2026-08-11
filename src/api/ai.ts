@@ -10,7 +10,7 @@
  *   喂入同一帧解析器（微信基础库 ≥2.20.2；App 端同分支，真机验证列入遗留）。
  */
 
-import { get, del, API_BASE_URL, type R } from '@/utils/request';
+import { get, del, put, API_BASE_URL, type R } from '@/utils/request';
 import { getToken } from '@/utils/auth';
 import { createSseFrameParser, createUtf8ChunkDecoder, type SseFrame } from '@/utils/sse';
 
@@ -79,6 +79,11 @@ export function listMessages(conversationId: string): Promise<AiChatMessage[]> {
 /** 删除会话（连带消息） */
 export function deleteConversation(conversationId: string): Promise<void> {
   return del<void>(`/ai/conversation/${conversationId}`);
+}
+
+/** 重命名会话（PUT body {title}，后端校验非空且 ≤128） */
+export function renameConversation(conversationId: string, title: string): Promise<void> {
+  return put<void>(`/ai/conversation/${conversationId}`, { title });
 }
 
 /* ================= 供应商 / 模型下拉 ================= */
