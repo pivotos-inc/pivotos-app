@@ -27,18 +27,15 @@ export default defineConfig(({ mode }) => {
       // 显式固定 H5 端口：PC 端 admin 占用 5173，移动端 H5 用 5174，避免同时起时端口漂移
       port: 5174,
       proxy: {
-        // H5 开发代理到 admin-server，避免跨域（与 PC 端 admin 同策略，见《04》第五节）；
+        // 统一 /api 代理：H5 端 baseURL='/api'，所有 API 请求经此前缀转发到后端并剥离 /api。
+        // 与 PC 端 admin vite.config.ts 及 Nginx location /api/ 语义一致，三环境零 CORS。
         // 小程序 / App 不经此代理，直连 import.meta.env.VITE_API_BASE_URL。
-        // 按插件 API 前缀登记——新 Plugin（flow/file/job…）接入时各加一条。
-        '/system': { target: apiTarget, changeOrigin: true },
-        '/message': { target: apiTarget, changeOrigin: true },
-        // 移动端多端登录命名空间（auth Starter 多账号体系，S16 接入）
-        '/app': { target: apiTarget, changeOrigin: true },
-        '/mini': { target: apiTarget, changeOrigin: true },
-        // file Plugin 预签名（S16 接入）
-        '/file': { target: apiTarget, changeOrigin: true },
-        // AI 对话（S22 接入；含 SSE 流式，http-proxy 对 text/event-stream 默认不缓冲）
-        '/ai': { target: apiTarget, changeOrigin: true },
+        // rewrite 剥离前缀后 http-proxy 对 text/event-stream 默认不缓冲，SSE 流式免单独 location。
+        '/api': {
+          target: apiTarget,
+          changeOrigin: true,
+          rewrite: (path: string) => path.replace(/^\/api/, ''),
+        },
       },
     },
   };
