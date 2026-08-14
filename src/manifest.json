@@ -2,8 +2,8 @@
     "name" : "PivotOS",
     "appid" : "",
     "description" : "枢磐科技 PivotOS 一码三端移动端（App / H5 / 小程序）",
-    "versionName" : "2.6.0",
-    "versionCode" : "260",
+    "versionName" : "2.7.0",
+    "versionCode" : "270",
     "transformPx" : false,
     /* 5+App特有相关 */
     "app-plus" : {
