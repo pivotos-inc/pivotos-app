@@ -22,25 +22,42 @@ export interface SseFrame {
 /**
  * SSE 帧解析器：喂入任意切割的文本增量，按空行（LF LF）完整分帧后回调；
  * CRLF 先归一为 LF（部分代理会改写换行）。data 跨多行时按 SSE 规范拼接。
+ * flush() 用于流结束后处理残留 buffer：最后一帧（done）的 \n\n 终止符可能
+ * 未随最终 chunk 送达（代理缓冲 / 连接关闭时序），不 flush 则引用等末帧数据丢失。
  */
-export function createSseFrameParser(onFrame: (frame: SseFrame) => void): (text: string) => void {
+export function createSseFrameParser(onFrame: (frame: SseFrame) => void): {
+  feed: (text: string) => void;
+  flush: () => void;
+} {
   let buffer = '';
-  return (text: string) => {
-    buffer += text;
-    const frames = buffer.split(CRLF).join(LF).split(LF + LF);
-    buffer = frames.pop() ?? '';
-    for (const raw of frames) {
-      let event = 'message';
-      let data = '';
-      for (const line of raw.split(LF)) {
-        if (line.startsWith('event:')) {
-          event = line.slice(6).trim();
-        } else if (line.startsWith('data:')) {
-          data += line.slice(5).trimStart();
-        }
+  /** 解析单帧并回调 */
+  const parseFrame = (raw: string): void => {
+    let event = 'message';
+    let data = '';
+    for (const line of raw.split(LF)) {
+      if (line.startsWith('event:')) {
+        event = line.slice(6).trim();
+      } else if (line.startsWith('data:')) {
+        data += line.slice(5).trimStart();
       }
-      if (data) onFrame({ event, data });
     }
+    if (data) onFrame({ event, data });
+  };
+  return {
+    feed(text: string) {
+      buffer += text;
+      const frames = buffer.split(CRLF).join(LF).split(LF + LF);
+      buffer = frames.pop() ?? '';
+      for (const raw of frames) {
+        parseFrame(raw);
+      }
+    },
+    flush() {
+      if (buffer.trim()) {
+        parseFrame(buffer.trim());
+        buffer = '';
+      }
+    },
   };
 }
 

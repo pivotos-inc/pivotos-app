@@ -192,13 +192,16 @@ function streamByFetch(body: AiChatSendBody, callbacks: ChatStreamCallbacks): Ch
 
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
-    const feed = createSseFrameParser((frame) => dispatchFrame(frame, callbacks));
+    const parser = createSseFrameParser((frame) => dispatchFrame(frame, callbacks));
     try {
       for (;;) {
         const { done: finished, value } = await reader.read();
         if (finished) break;
-        feed(decoder.decode(value, { stream: true }));
+        parser.feed(decoder.decode(value, { stream: true }));
       }
+      // 流结束后 flush decoder + 残留 buffer（同 PC 端 chat.ts：done 是末帧，\n\n 可能未送达）
+      parser.feed(decoder.decode());
+      parser.flush();
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
         callbacks.onError?.('连接中断，请稍后重试');
@@ -222,7 +225,7 @@ function streamByChunkedRequest(
   let rawText = '';
 
   const decode = createUtf8ChunkDecoder();
-  const feed = createSseFrameParser((frame) => {
+  const parser = createSseFrameParser((frame) => {
     gotSseFrame = dispatchFrame(frame, callbacks) || gotSseFrame;
   });
 
@@ -230,6 +233,8 @@ function streamByChunkedRequest(
   const done = new Promise<void>((resolve) => {
     /** 结束时兜底：整个响应不是 SSE（如 5020/1002 的 JSON R 体）则取 msg 报错 */
     const settle = (fallbackMsg?: string) => {
+      // 流结束后 flush 残留 buffer（同 H5 端：done 是末帧，\n\n 可能未送达）
+      parser.flush();
       if (!gotSseFrame && !aborted) {
         let msg = fallbackMsg ?? '';
         try {
@@ -274,7 +279,7 @@ function streamByChunkedRequest(
     chunkedTask.onChunkReceived?.((res) => {
       const text = decode(res.data);
       rawText += text;
-      feed(text);
+      parser.feed(text);
     });
   });
 
