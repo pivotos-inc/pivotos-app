@@ -66,6 +66,12 @@
 					"style": {
 						"navigationStyle": "custom"
 					}
+				},
+				{
+					"path": "workflow/approval",
+					"style": {
+						"navigationBarTitleText": "审批详情"
+					}
 				}
 			]
 		},

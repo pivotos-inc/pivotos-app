@@ -3,7 +3,7 @@
  * - Token 注入：Authorization 裸值（后端 token-name=Authorization，未配置 token-prefix）
  * - R<T> 解包：code === 0（对齐 @pivotos/types SUCCESS_CODE）返回 data，否则统一错误处理
  * - 401 / 1002（GlobalErrorCode.UNAUTHORIZED）：清 Token 跳登录页
- * - 环境域名：H5 走 Vite 代理（相对路径）；小程序 / App 直连 VITE_API_BASE_URL
+ * - 环境域名：H5 走 '/api' 前缀（Vite 代理 / Nginx 反代剥离）；小程序 / App 直连 VITE_API_BASE_URL
  * - 接口加密：预留开关，联调链路通后再开启（对接 starter-web）
  *
  * 纪律：API 调用必须走 src/api/（基于本封装），禁止页面内裸 uni.request。
@@ -51,15 +51,16 @@ export class ServiceError extends Error {
 
 /**
  * 环境域名解析（条件编译，各端只保留本端分支）：
- * - H5：空串相对路径，开发经 vite.config.ts 代理、生产由 Nginx 反代
- * - 小程序 / App：直连 VITE_API_BASE_URL（小程序需配置服务器域名白名单）
+ * - H5：'/api' 前缀，开发经 vite.config.ts 代理、生产由 Nginx 反代剥离前缀（与 PC 端 admin 同策略）
+ * - 小程序 / App：直连 VITE_API_BASE_URL（无 /api 前缀，后端无此前缀；小程序需配置服务器域名白名单）
  */
 function resolveApiBaseUrl(): string {
-  let url = '';
-  // #ifndef H5
-  url = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+  // #ifdef H5
+  return '/api';
   // #endif
-  return url;
+  // #ifndef H5
+  return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+  // #endif
 }
 export const API_BASE_URL = resolveApiBaseUrl();
 
