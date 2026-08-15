@@ -72,6 +72,13 @@
 					"style": {
 						"navigationBarTitleText": "审批详情"
 					}
+				},
+				{
+					"path": "workflow/started",
+					"style": {
+						"navigationBarTitleText": "我的流程",
+						"enablePullDownRefresh": true
+					}
 				}
 			]
 		},
