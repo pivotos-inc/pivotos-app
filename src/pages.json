@@ -86,6 +86,13 @@
 						"navigationBarTitleText": "抄送我的",
 						"enablePullDownRefresh": true
 					}
+				},
+				{
+					"path": "workflow/pending",
+					"style": {
+						"navigationBarTitleText": "我的待办",
+						"enablePullDownRefresh": true
+					}
 				}
 			]
 		},

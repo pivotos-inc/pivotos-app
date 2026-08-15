@@ -26,6 +26,8 @@ export interface WorkflowHisTask {
   targetNodeName?: string;
   approver?: string;
   skipType?: string;
+  /** warm-flow CooperateType：6=加签 7=减签（S81 展示补齐） */
+  cooperateType?: number;
   flowStatus?: string;
   message?: string;
   createTime?: string;
@@ -161,4 +163,28 @@ export function pageCcMine(query: CcPageQuery): Promise<PageResult<WorkflowCc>> 
 /** 抄送标记已读（S80，幂等） */
 export function markCcRead(id: string): Promise<void> {
   return put<void>(`/workflow/cc/${id}/read`);
+}
+
+/** 加签选人用户选项（S81） */
+export interface UserOption {
+  id: string;
+  username?: string;
+  nickname?: string;
+  [key: string]: unknown;
+}
+
+export interface AddSignatureCmd {
+  taskId: string;
+  userIds: string[];
+  message?: string;
+}
+
+/** 加签选人选项（S81：支持关键字检索） */
+export function userOptions(keyword?: string): Promise<UserOption[]> {
+  return get<UserOption[]>('/workflow/task/user-options', keyword ? { keyword } : undefined);
+}
+
+/** 加签（S81：或签语义，任一审批人通过即推进） */
+export function addSignature(cmd: AddSignatureCmd): Promise<void> {
+  return put<void>('/workflow/task/add-signature', cmd);
 }

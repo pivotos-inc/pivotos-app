@@ -70,11 +70,16 @@
             {{ statusLabel(historyRow.flowStatus) }}
           </wd-tag>
         </view>
+        <!-- 发起人操作（S81）：仅审批中可催办/撤回 -->
+        <view v-if="historyRow && historyRow.flowStatus === '1'" class="history-actions">
+          <wd-button size="small" type="primary" plain :loading="urgeLoading" @click="handleUrge">催办</wd-button>
+          <wd-button size="small" type="error" plain :loading="revokeLoading" @click="handleRevoke">撤回</wd-button>
+        </view>
         <template v-if="historyList.length > 0">
           <view v-for="item in historyList" :key="item.id" class="history-item">
             <view class="history-head">
               <text class="history-node">{{ item.nodeName }}</text>
-              <wd-tag :type="skipTagType(item.skipType)" size="small">{{ skipLabel(item.skipType) }}</wd-tag>
+              <wd-tag :type="skipTagType(effType(item))" size="small">{{ skipLabel(effType(item)) }}</wd-tag>
             </view>
             <view class="history-meta">
               <text>审批人: {{ item.approver ?? '-' }}</text>
@@ -97,6 +102,8 @@ import {
   pageDefinitions,
   startInstance,
   taskHistory,
+  urgeInstance,
+  revokeInstance,
   type WorkflowInstance,
   type WorkflowDefinition,
   type WorkflowHisTask,
@@ -122,16 +129,22 @@ function statusTagType(status?: string): 'success' | 'danger' | 'warning' | 'inf
 }
 
 const SKIP_LABEL: Record<string, string> = {
-  PASS: '通过', REJECT: '驳回', NONE: '无动作',
+  PASS: '通过', REJECT: '驳回', NONE: '无动作', ADD_SIGNATURE: '加签', REDUCTION_SIGNATURE: '减签',
 };
 const SKIP_TAG: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'primary'> = {
-  PASS: 'success', REJECT: 'danger', NONE: 'info',
+  PASS: 'success', REJECT: 'danger', NONE: 'info', ADD_SIGNATURE: 'warning', REDUCTION_SIGNATURE: 'warning',
 };
 function skipLabel(type?: string): string {
   return SKIP_LABEL[type ?? ''] ?? type ?? '-';
 }
 function skipTagType(type?: string): 'success' | 'danger' | 'warning' | 'info' | 'primary' {
   return SKIP_TAG[type ?? ''] ?? 'info';
+}
+/** 加签留痕 skipType=NONE，展示以 cooperateType 优先（S81） */
+function effType(item: WorkflowHisTask): string | undefined {
+  if (item.cooperateType === 6) return 'ADD_SIGNATURE';
+  if (item.cooperateType === 7) return 'REDUCTION_SIGNATURE';
+  return item.skipType;
 }
 
 // ---------- 列表 ----------
@@ -258,6 +271,45 @@ async function openHistory(row: WorkflowInstance): Promise<void> {
     historyLoaded.value = true;
   }
 }
+
+// ---------- 催办 / 撤回（S81） ----------
+const urgeLoading = ref(false);
+const revokeLoading = ref(false);
+
+function handleUrge(): void {
+  if (!historyRow.value) return;
+  const row = historyRow.value;
+  urgeLoading.value = true;
+  urgeInstance(row.id)
+    .then(() => uni.showToast({ title: '催办成功', icon: 'success' }))
+    .catch((e: unknown) => uni.showToast({ title: (e as { msg?: string })?.msg ?? '催办失败', icon: 'none' }))
+    .finally(() => {
+      urgeLoading.value = false;
+    });
+}
+
+function handleRevoke(): void {
+  if (!historyRow.value) return;
+  const row = historyRow.value;
+  uni.showModal({
+    title: '确认撤回',
+    content: `确定撤回「${row.flowName ?? ''}」吗？`,
+    success: (res) => {
+      if (!res.confirm) return;
+      revokeLoading.value = true;
+      revokeInstance(row.id)
+        .then(async () => {
+          uni.showToast({ title: '已撤回', icon: 'success' });
+          historyVisible.value = false;
+          await loadList(true);
+        })
+        .catch((e: unknown) => uni.showToast({ title: (e as { msg?: string })?.msg ?? '撤回失败', icon: 'none' }))
+        .finally(() => {
+          revokeLoading.value = false;
+        });
+    },
+  });
+}
 </script>
 
 <style scoped>
@@ -346,6 +398,11 @@ async function openHistory(row: WorkflowInstance): Promise<void> {
   margin-bottom: 20rpx;
   color: #606266;
   font-size: 26rpx;
+}
+.history-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
 }
 .history-item {
   padding: 16rpx 0;
