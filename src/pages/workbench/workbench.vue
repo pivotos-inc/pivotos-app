@@ -58,6 +58,15 @@ const AI_ENTRY: WorkbenchItem = {
   sort: 0,
 };
 
+/** 我的流程固定入口（S79：发起/进度移动端补齐，与 AI 助手同口径前端内置） */
+const WORKFLOW_ENTRY: WorkbenchItem = {
+  id: 'workflow-started',
+  menuName: '我的流程',
+  icon: '',
+  path: '/pages-sub/workflow/started',
+  sort: 0,
+};
+
 async function loadData() {
   try {
     const [grid, count, notices] = await Promise.all([
@@ -65,7 +74,7 @@ async function loadData() {
       unreadCount().catch(() => 0),
       listAnnouncements(3).catch(() => [] as AnnouncementItem[]),
     ]);
-    items.value = [AI_ENTRY, ...grid];
+    items.value = [AI_ENTRY, WORKFLOW_ENTRY, ...grid];
     unread.value = Number(count) || 0;
     announcements.value = notices;
     // 消息 tab 角标同步
