@@ -79,6 +79,13 @@
 						"navigationBarTitleText": "我的流程",
 						"enablePullDownRefresh": true
 					}
+				},
+				{
+					"path": "workflow/cc",
+					"style": {
+						"navigationBarTitleText": "抄送我的",
+						"enablePullDownRefresh": true
+					}
 				}
 			]
 		},

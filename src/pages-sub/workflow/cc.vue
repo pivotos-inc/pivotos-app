@@ -1,75 +1,59 @@
 <template>
-  <view class="started-page">
-    <!-- 搜索 + 状态筛选 -->
+  <view class="cc-page">
+    <!-- 搜索 + 已读筛选 -->
     <wd-search v-model="keyword" placeholder="按流程名称搜索" hide-cancel @search="onSearch" @clear="onSearch" />
     <wd-tabs v-model="activeTab" @change="onTabChange">
       <wd-tab v-for="tab in TABS" :key="tab.name" :title="tab.title" :name="tab.name" />
     </wd-tabs>
 
-    <!-- 抄送我的入口（S80） -->
-    <view class="cc-entry" @click="goCc">
-      <text class="cc-entry-text">抄送我的 ›</text>
-    </view>
-
-    <!-- 实例列表 -->
+    <!-- 抄送列表 -->
     <view v-if="list.length > 0" class="list">
-      <view v-for="item in list" :key="item.id" class="card" @click="openHistory(item)">
+      <view v-for="item in list" :key="item.id" class="card" @click="openDetail(item)">
         <view class="card-head">
-          <text class="flow-name">{{ item.flowName ?? '-' }}</text>
+          <view class="head-left">
+            <view v-if="item.readFlag === 0" class="unread-dot" />
+            <text class="flow-name">{{ item.flowName ?? '-' }}</text>
+          </view>
           <wd-tag :type="statusTagType(item.flowStatus)" size="small">
             {{ statusLabel(item.flowStatus) }}
           </wd-tag>
         </view>
         <view class="card-row">
-          <text class="label">业务名称</text>
-          <text class="value">{{ item.businessId || '-' }}</text>
+          <text class="label">发起人</text>
+          <text class="value">{{ item.creatorName ?? '-' }}</text>
         </view>
         <view class="card-row">
           <text class="label">当前节点</text>
           <text class="value">{{ item.nodeName ?? '-' }}</text>
         </view>
         <view class="card-row">
-          <text class="label">发起时间</text>
+          <text class="label">抄送时间</text>
           <text class="value">{{ item.createTime ?? '-' }}</text>
+        </view>
+        <view class="card-row">
+          <text class="label">阅读状态</text>
+          <text class="value">{{ item.readFlag === 1 ? '已读' : '未读' }}</text>
         </view>
       </view>
       <wd-status-tip v-if="finished && list.length > 0" image="content" tip="没有更多了" />
     </view>
-    <wd-status-tip v-else-if="loaded" image="content" tip="暂无发起的流程" />
+    <wd-status-tip v-else-if="loaded" image="content" tip="暂无抄送记录" />
 
-    <!-- 发起流程悬浮按钮 -->
-    <view class="fab" @click="openStart">
-      <text class="fab-text">发起流程</text>
-    </view>
-
-    <!-- 发起流程弹窗 -->
-    <wd-popup v-model="startVisible" position="bottom" :close-on-click-modal="false" custom-style="border-radius: 24rpx 24rpx 0 0; padding: 32rpx;">
-      <view class="start-form">
-        <view class="start-title">发起流程</view>
-        <wd-select-picker
-          v-model="startForm.flowCode"
-          :columns="definitionOptions"
-          label="选择流程"
-          placeholder="请选择流程"
-        />
-        <wd-input v-model="startForm.businessName" label="业务名称" placeholder="请输入业务名称（可选）" clearable />
-        <view class="start-buttons">
-          <wd-button block plain @click="startVisible = false">取消</wd-button>
-          <wd-button block type="primary" :loading="startLoading" @click="handleStart">提交</wd-button>
-        </view>
-      </view>
-    </wd-popup>
-
-    <!-- 审批进度弹窗 -->
-    <wd-popup v-model="historyVisible" position="bottom" custom-style="border-radius: 24rpx 24rpx 0 0; padding: 32rpx; max-height: 70vh;">
-      <scroll-view scroll-y class="history-scroll">
-        <view class="start-title">审批进度</view>
-        <view v-if="historyRow" class="history-summary">
-          <text>流程「{{ historyRow.flowName }}」</text>
-          <wd-tag :type="statusTagType(historyRow.flowStatus)" size="small">
-            {{ statusLabel(historyRow.flowStatus) }}
+    <!-- 详情弹窗：标记已读 + 审批进度 -->
+    <wd-popup v-model="detailVisible" position="bottom" custom-style="border-radius: 24rpx 24rpx 0 0; padding: 32rpx; max-height: 70vh;">
+      <scroll-view scroll-y class="detail-scroll">
+        <view class="detail-title">抄送详情</view>
+        <view v-if="detailRow" class="detail-summary">
+          <text>流程「{{ detailRow.flowName }}」</text>
+          <wd-tag :type="statusTagType(detailRow.flowStatus)" size="small">
+            {{ statusLabel(detailRow.flowStatus) }}
           </wd-tag>
         </view>
+        <view v-if="detailRow" class="detail-meta">
+          <text>发起人：{{ detailRow.creatorName ?? '-' }}</text>
+          <text>当前节点：{{ detailRow.nodeName ?? '-' }}</text>
+        </view>
+        <view class="detail-title sub">审批进度</view>
         <template v-if="historyList.length > 0">
           <view v-for="item in historyList" :key="item.id" class="history-item">
             <view class="history-head">
@@ -90,15 +74,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { onLoad, onPullDownRefresh, onReachBottom } from '@dcloudio/uni-app';
 import {
-  pageMyInstances,
-  pageDefinitions,
-  startInstance,
+  pageCcMine,
+  markCcRead,
   taskHistory,
-  type WorkflowInstance,
-  type WorkflowDefinition,
+  type WorkflowCc,
   type WorkflowHisTask,
 } from '@/api/workflow';
 
@@ -113,7 +95,6 @@ const STATUS_TAG: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'pr
   '5': 'info', '6': 'info', '7': 'info', '8': 'success', '9': 'danger',
   '10': 'info', '11': 'info', '12': 'warning', '13': 'warning',
 };
-
 function statusLabel(status?: string): string {
   return STATUS_LABEL[status ?? ''] ?? status ?? '-';
 }
@@ -134,42 +115,41 @@ function skipTagType(type?: string): 'success' | 'danger' | 'warning' | 'info' |
   return SKIP_TAG[type ?? ''] ?? 'info';
 }
 
-// ---------- 列表 ----------
+// ---------- 列表（readFlag 走后端过滤） ----------
 const TABS = [
   { name: 'all', title: '全部' },
-  { name: 'ongoing', title: '审批中' },
-  { name: 'finished', title: '已完结' },
+  { name: 'unread', title: '未读' },
+  { name: 'read', title: '已读' },
 ];
-const ONGOING_STATUS = new Set(['1']);
-const FINISHED_STATUS = new Set(['2', '3', '4', '5', '6', '8', '9', '10']);
 
 const activeTab = ref('all');
 const keyword = ref('');
-const list = ref<WorkflowInstance[]>([]);
+const list = ref<WorkflowCc[]>([]);
 const pageNum = ref(1);
 const pageSize = 10;
 const total = ref(0);
 const loaded = ref(false);
 const finished = computed(() => list.value.length >= total.value);
 
+function readFlagOfTab(): number | undefined {
+  if (activeTab.value === 'unread') return 0;
+  if (activeTab.value === 'read') return 1;
+  return undefined;
+}
+
 async function loadList(reset = false): Promise<void> {
   if (reset) {
     pageNum.value = 1;
     list.value = [];
   }
-  const res = await pageMyInstances({
+  const res = await pageCcMine({
     pageNum: pageNum.value,
     pageSize,
     flowName: keyword.value || undefined,
+    readFlag: readFlagOfTab(),
   });
-  const all = res.list ?? [];
-  // 客户端按 tab 过滤（后端 page 仅支持 flowName 过滤）
-  const filtered = all.filter((i) => {
-    if (activeTab.value === 'ongoing') return ONGOING_STATUS.has(i.flowStatus ?? '');
-    if (activeTab.value === 'finished') return FINISHED_STATUS.has(i.flowStatus ?? '');
-    return true;
-  });
-  list.value = pageNum.value === 1 ? filtered : [...list.value, ...filtered];
+  const rows = res.list ?? [];
+  list.value = pageNum.value === 1 ? rows : [...list.value, ...rows];
   total.value = Number(res.total ?? 0);
   loaded.value = true;
 }
@@ -184,11 +164,6 @@ function onTabChange(): void {
 onLoad(() => {
   void loadList(true);
 });
-
-/** 跳转抄送我的页（S80） */
-function goCc(): void {
-  uni.navigateTo({ url: '/pages-sub/workflow/cc' });
-}
 onPullDownRefresh(async () => {
   await loadList(true);
   uni.stopPullDownRefresh();
@@ -200,60 +175,28 @@ onReachBottom(() => {
   }
 });
 
-// ---------- 发起流程 ----------
-const startVisible = ref(false);
-const startLoading = ref(false);
-const definitions = ref<WorkflowDefinition[]>([]);
-const startForm = reactive({ flowCode: '', businessName: '' });
-
-const definitionOptions = computed(() =>
-  definitions.value
-    .filter((d) => d.activityStatus === 1)
-    .map((d) => ({ value: d.flowCode, label: d.flowName })),
-);
-
-async function openStart(): Promise<void> {
-  startVisible.value = true;
-  if (definitions.value.length === 0) {
-    const res = await pageDefinitions({ pageNum: 1, pageSize: 100, isPublish: 1 });
-    definitions.value = res.list ?? [];
-  }
-}
-
-async function handleStart(): Promise<void> {
-  if (!startForm.flowCode) {
-    uni.showToast({ title: '请选择流程', icon: 'none' });
-    return;
-  }
-  startLoading.value = true;
-  try {
-    await startInstance({
-      flowCode: startForm.flowCode,
-      businessName: startForm.businessName || undefined,
-    });
-    uni.showToast({ title: '发起成功', icon: 'success' });
-    startVisible.value = false;
-    startForm.flowCode = '';
-    startForm.businessName = '';
-    await loadList(true);
-  } finally {
-    startLoading.value = false;
-  }
-}
-
-// ---------- 审批进度 ----------
-const historyVisible = ref(false);
-const historyRow = ref<WorkflowInstance | null>(null);
+// ---------- 详情：标记已读 + 审批进度 ----------
+const detailVisible = ref(false);
+const detailRow = ref<WorkflowCc | null>(null);
 const historyList = ref<WorkflowHisTask[]>([]);
 const historyLoaded = ref(false);
 
-async function openHistory(row: WorkflowInstance): Promise<void> {
-  historyRow.value = row;
+async function openDetail(row: WorkflowCc): Promise<void> {
+  detailRow.value = row;
   historyList.value = [];
   historyLoaded.value = false;
-  historyVisible.value = true;
+  detailVisible.value = true;
+  // 未读 → 标记已读（幂等），本地即时刷新
+  if (row.readFlag === 0) {
+    try {
+      await markCcRead(row.id);
+      row.readFlag = 1;
+    } catch {
+      // 已读失败不阻塞详情查看
+    }
+  }
   try {
-    historyList.value = await taskHistory(row.id);
+    historyList.value = await taskHistory(row.instanceId);
   } finally {
     historyLoaded.value = true;
   }
@@ -261,20 +204,11 @@ async function openHistory(row: WorkflowInstance): Promise<void> {
 </script>
 
 <style scoped>
-.started-page {
+.cc-page {
   min-height: 100vh;
   box-sizing: border-box;
   background: #f5f6fa;
-  padding-bottom: 160rpx;
-}
-.cc-entry {
-  display: flex;
-  justify-content: flex-end;
-  padding: 16rpx 24rpx 0;
-}
-.cc-entry-text {
-  font-size: 26rpx;
-  color: #4d80f0;
+  padding-bottom: 64rpx;
 }
 .list {
   padding: 24rpx;
@@ -290,6 +224,17 @@ async function openHistory(row: WorkflowInstance): Promise<void> {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16rpx;
+}
+.head-left {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+.unread-dot {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: #fa3534;
 }
 .flow-name {
   font-size: 32rpx;
@@ -309,43 +254,32 @@ async function openHistory(row: WorkflowInstance): Promise<void> {
   color: #333;
   font-size: 26rpx;
 }
-.fab {
-  position: fixed;
-  right: 32rpx;
-  bottom: calc(64rpx + env(safe-area-inset-bottom));
-  background: #4d80f0;
-  color: #fff;
-  border-radius: 44rpx;
-  padding: 20rpx 40rpx;
-  box-shadow: 0 8rpx 24rpx rgba(77, 128, 240, 0.35);
+.detail-scroll {
+  max-height: 60vh;
 }
-.fab-text {
-  font-size: 28rpx;
-}
-.start-form {
-  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
-}
-.start-title {
+.detail-title {
   font-size: 32rpx;
   font-weight: 600;
   color: #2c405a;
   margin-bottom: 24rpx;
 }
-.start-buttons {
-  display: flex;
-  gap: 24rpx;
-  margin-top: 32rpx;
+.detail-title.sub {
+  font-size: 28rpx;
+  margin-top: 24rpx;
 }
-.history-scroll {
-  max-height: 60vh;
-}
-.history-summary {
+.detail-summary {
   display: flex;
   align-items: center;
   gap: 12rpx;
-  margin-bottom: 20rpx;
+  margin-bottom: 12rpx;
   color: #606266;
   font-size: 26rpx;
+}
+.detail-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 24rpx;
+  color: #909399;
 }
 .history-item {
   padding: 16rpx 0;
