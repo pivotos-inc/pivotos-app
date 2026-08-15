@@ -188,3 +188,19 @@ export function userOptions(keyword?: string): Promise<UserOption[]> {
 export function addSignature(cmd: AddSignatureCmd): Promise<void> {
   return put<void>('/workflow/task/add-signature', cmd);
 }
+
+export interface ReductionSignatureCmd {
+  taskId: string;
+  userIds: string[];
+  message?: string;
+}
+
+/** 待办任务当前审批人（S82：减签选人候选） */
+export function taskApprovers(taskId: string): Promise<UserOption[]> {
+  return get<UserOption[]>(`/workflow/task/${taskId}/approvers`);
+}
+
+/** 减签（S82：引擎护栏——办理人不足两人不可减签） */
+export function reductionSignature(cmd: ReductionSignatureCmd): Promise<void> {
+  return put<void>('/workflow/task/reduction-signature', cmd);
+}

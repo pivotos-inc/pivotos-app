@@ -54,6 +54,7 @@
         </view>
         <view class="action-buttons sub">
           <wd-button type="warning" block plain :loading="actionLoading" @click="openAddSignature">加签</wd-button>
+          <wd-button type="warning" block plain :loading="actionLoading" @click="openReductionSignature">减签</wd-button>
         </view>
       </view>
     </template>
@@ -77,6 +78,24 @@
         </view>
       </view>
     </wd-popup>
+
+    <!-- 减签弹窗（S82：候选为当前待办审批人，引擎护栏不足两人不可减签） -->
+    <wd-popup v-model="redSignVisible" position="bottom" :close-on-click-modal="false" custom-style="border-radius: 24rpx 24rpx 0 0; padding: 32rpx;">
+      <view class="addsign-form">
+        <view class="addsign-title">减签（移除审批人）</view>
+        <wd-select-picker
+          v-model="redSignUserIds"
+          :columns="approverColumns"
+          type="checkbox"
+          label="选择减签人"
+          placeholder="请选择要移除的审批人"
+        />
+        <view class="addsign-buttons">
+          <wd-button block plain @click="redSignVisible = false">取消</wd-button>
+          <wd-button block type="primary" :loading="actionLoading" @click="handleReductionSignature">提交</wd-button>
+        </view>
+      </view>
+    </wd-popup>
   </view>
 </template>
 
@@ -90,6 +109,8 @@ import {
   taskHistory,
   userOptions,
   addSignature,
+  taskApprovers,
+  reductionSignature,
   type WorkflowTask,
   type WorkflowHisTask,
   type UserOption,
@@ -233,6 +254,48 @@ async function handleAddSignature(): Promise<void> {
     uni.showToast({ title: '加签成功', icon: 'success' });
     addSignVisible.value = false;
     addSignUserIds.value = [];
+    historyList.value = await taskHistory(task.value.instanceId);
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
+// ---------- 减签（S82） ----------
+const redSignVisible = ref(false);
+const redSignUserIds = ref<string[]>([]);
+const approvers = ref<UserOption[]>([]);
+
+/** 减签候选 = 当前待办审批人（后端 /{taskId}/approvers） */
+const approverColumns = computed(() =>
+  approvers.value.map((u) => ({
+    value: u.id,
+    label: u.nickname ? `${u.nickname}（${u.username ?? u.id}）` : (u.username ?? u.id),
+  })),
+);
+
+async function openReductionSignature(): Promise<void> {
+  if (!task.value) return;
+  redSignUserIds.value = [];
+  redSignVisible.value = true;
+  approvers.value = await taskApprovers(task.value.id);
+}
+
+async function handleReductionSignature(): Promise<void> {
+  if (!task.value) return;
+  if (redSignUserIds.value.length === 0) {
+    uni.showToast({ title: '请选择减签人', icon: 'none' });
+    return;
+  }
+  actionLoading.value = true;
+  try {
+    await reductionSignature({
+      taskId: task.value.id,
+      userIds: redSignUserIds.value,
+      message: message.value || undefined,
+    });
+    uni.showToast({ title: '减签成功', icon: 'success' });
+    redSignVisible.value = false;
+    redSignUserIds.value = [];
     historyList.value = await taskHistory(task.value.instanceId);
   } finally {
     actionLoading.value = false;
