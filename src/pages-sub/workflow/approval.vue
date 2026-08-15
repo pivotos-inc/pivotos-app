@@ -25,8 +25,8 @@
           <view v-for="item in historyList" :key="item.id" class="history-item">
             <view class="history-head">
               <text class="history-node">{{ item.nodeName }}</text>
-              <wd-tag :type="skipTagType(item.skipType)" size="small">
-                {{ skipLabel(item.skipType) }}
+              <wd-tag :type="skipTagType(effType(item))" size="small">
+                {{ skipLabel(effType(item)) }}
               </wd-tag>
             </view>
             <view class="history-meta">
@@ -52,22 +52,47 @@
           <wd-button type="error" block :loading="actionLoading" @click="handleReject">驳回</wd-button>
           <wd-button type="primary" block :loading="actionLoading" @click="handlePass">通过</wd-button>
         </view>
+        <view class="action-buttons sub">
+          <wd-button type="warning" block plain :loading="actionLoading" @click="openAddSignature">加签</wd-button>
+        </view>
       </view>
     </template>
     <wd-status-tip v-else-if="loaded" image="content" tip="任务不存在或已处理" />
+
+    <!-- 加签弹窗（S81） -->
+    <wd-popup v-model="addSignVisible" position="bottom" :close-on-click-modal="false" custom-style="border-radius: 24rpx 24rpx 0 0; padding: 32rpx;">
+      <view class="addsign-form">
+        <view class="addsign-title">加签（追加审批人）</view>
+        <wd-input v-model="optionKeyword" placeholder="搜索用户名/昵称" clearable @change="reloadOptions" @clear="reloadOptions" />
+        <wd-select-picker
+          v-model="addSignUserIds"
+          :columns="userOptionColumns"
+          type="checkbox"
+          label="选择加签人"
+          placeholder="请选择加签人"
+        />
+        <view class="addsign-buttons">
+          <wd-button block plain @click="addSignVisible = false">取消</wd-button>
+          <wd-button block type="primary" :loading="actionLoading" @click="handleAddSignature">提交</wd-button>
+        </view>
+      </view>
+    </wd-popup>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import {
   pagePendingTasks,
   passTask,
   rejectTask,
   taskHistory,
+  userOptions,
+  addSignature,
   type WorkflowTask,
   type WorkflowHisTask,
+  type UserOption,
 } from '@/api/workflow';
 
 const task = ref<WorkflowTask>();
@@ -95,10 +120,12 @@ onLoad(async (query) => {
 });
 
 const SKIP_LABEL: Record<string, string> = {
-  pass: '通过', reject: '驳回', transfer: '转办', depute: '委派', revoke: '撤回', termination: '终止',
+  PASS: '通过', REJECT: '驳回', NONE: '无动作', TRANSFER: '转办', DEPUTE: '委派',
+  ADD_SIGNATURE: '加签', REDUCTION_SIGNATURE: '减签', REVOKE: '撤回', TERMINATION: '终止',
 };
 const SKIP_TAG: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'primary'> = {
-  pass: 'success', reject: 'danger', transfer: 'warning', depute: 'warning', revoke: 'info', termination: 'danger',
+  PASS: 'success', REJECT: 'danger', NONE: 'info', TRANSFER: 'warning', DEPUTE: 'warning',
+  ADD_SIGNATURE: 'warning', REDUCTION_SIGNATURE: 'warning', REVOKE: 'info', TERMINATION: 'danger',
 };
 
 function skipLabel(type?: string): string {
@@ -107,6 +134,13 @@ function skipLabel(type?: string): string {
 
 function skipTagType(type?: string): 'success' | 'danger' | 'warning' | 'info' | 'primary' {
   return SKIP_TAG[type ?? ''] ?? 'info';
+}
+
+/** 加签留痕的 skipType 为 NONE，展示以 cooperateType 优先（6=加签） */
+function effType(item: WorkflowHisTask): string | undefined {
+  if (item.cooperateType === 6) return 'ADD_SIGNATURE';
+  if (item.cooperateType === 7) return 'REDUCTION_SIGNATURE';
+  return item.skipType;
 }
 
 async function handlePass(): Promise<void> {
@@ -145,6 +179,64 @@ async function handleReject(): Promise<void> {
       }
     },
   });
+}
+
+// ---------- 加签（S81） ----------
+const addSignVisible = ref(false);
+const addSignUserIds = ref<string[]>([]);
+const options = ref<UserOption[]>([]);
+const optionKeyword = ref('');
+
+const userOptionColumns = computed(() => {
+  const cols = options.value.map((u) => ({
+    value: u.id,
+    label: u.nickname ? `${u.nickname}（${u.username ?? u.id}）` : (u.username ?? u.id),
+  }));
+  // 搜索收窄后已选项可能不在选项中，补占位项保证可回显/可取消
+  for (const id of addSignUserIds.value) {
+    if (!cols.some((c) => c.value === id)) {
+      cols.push({ value: id, label: id });
+    }
+  }
+  return cols;
+});
+
+let optionSeq = 0;
+async function reloadOptions(): Promise<void> {
+  const seq = ++optionSeq;
+  const rows = await userOptions(optionKeyword.value || undefined);
+  if (seq === optionSeq) {
+    options.value = rows;
+  }
+}
+
+async function openAddSignature(): Promise<void> {
+  addSignVisible.value = true;
+  if (options.value.length === 0) {
+    await reloadOptions();
+  }
+}
+
+async function handleAddSignature(): Promise<void> {
+  if (!task.value) return;
+  if (addSignUserIds.value.length === 0) {
+    uni.showToast({ title: '请选择加签人', icon: 'none' });
+    return;
+  }
+  actionLoading.value = true;
+  try {
+    await addSignature({
+      taskId: task.value.id,
+      userIds: addSignUserIds.value,
+      message: message.value || undefined,
+    });
+    uni.showToast({ title: '加签成功', icon: 'success' });
+    addSignVisible.value = false;
+    addSignUserIds.value = [];
+    historyList.value = await taskHistory(task.value.instanceId);
+  } finally {
+    actionLoading.value = false;
+  }
 }
 </script>
 
@@ -228,5 +320,22 @@ async function handleReject(): Promise<void> {
   display: flex;
   gap: 24rpx;
   margin-top: 16rpx;
+}
+.action-buttons.sub {
+  margin-top: 12rpx;
+}
+.addsign-form {
+  padding-bottom: calc(16rpx + env(safe-area-inset-bottom));
+}
+.addsign-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #2c405a;
+  margin-bottom: 24rpx;
+}
+.addsign-buttons {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 32rpx;
 }
 </style>

@@ -67,6 +67,15 @@ const WORKFLOW_ENTRY: WorkbenchItem = {
   sort: 0,
 };
 
+/** 我的待办固定入口（S81：审批/加签移动端入口） */
+const PENDING_ENTRY: WorkbenchItem = {
+  id: 'workflow-pending',
+  menuName: '我的待办',
+  icon: '',
+  path: '/pages-sub/workflow/pending',
+  sort: 0,
+};
+
 async function loadData() {
   try {
     const [grid, count, notices] = await Promise.all([
@@ -74,7 +83,7 @@ async function loadData() {
       unreadCount().catch(() => 0),
       listAnnouncements(3).catch(() => [] as AnnouncementItem[]),
     ]);
-    items.value = [AI_ENTRY, WORKFLOW_ENTRY, ...grid];
+    items.value = [AI_ENTRY, WORKFLOW_ENTRY, PENDING_ENTRY, ...grid];
     unread.value = Number(count) || 0;
     announcements.value = notices;
     // 消息 tab 角标同步

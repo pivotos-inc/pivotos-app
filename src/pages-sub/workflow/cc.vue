@@ -58,7 +58,7 @@
           <view v-for="item in historyList" :key="item.id" class="history-item">
             <view class="history-head">
               <text class="history-node">{{ item.nodeName }}</text>
-              <wd-tag :type="skipTagType(item.skipType)" size="small">{{ skipLabel(item.skipType) }}</wd-tag>
+              <wd-tag :type="skipTagType(effType(item))" size="small">{{ skipLabel(effType(item)) }}</wd-tag>
             </view>
             <view class="history-meta">
               <text>审批人: {{ item.approver ?? '-' }}</text>
@@ -104,15 +104,25 @@ function statusTagType(status?: string): 'success' | 'danger' | 'warning' | 'inf
 
 const SKIP_LABEL: Record<string, string> = {
   PASS: '通过', REJECT: '驳回', NONE: '无动作',
+  ADD_SIGNATURE: '加签', REDUCTION_SIGNATURE: '减签',
+  TRANSFER: '转办', DEPUTE: '委派', REVOKE: '撤回', TERMINATION: '终止',
 };
 const SKIP_TAG: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'primary'> = {
   PASS: 'success', REJECT: 'danger', NONE: 'info',
+  ADD_SIGNATURE: 'warning', REDUCTION_SIGNATURE: 'warning',
+  TRANSFER: 'warning', DEPUTE: 'warning', REVOKE: 'danger', TERMINATION: 'danger',
 };
 function skipLabel(type?: string): string {
   return SKIP_LABEL[type ?? ''] ?? type ?? '-';
 }
 function skipTagType(type?: string): 'success' | 'danger' | 'warning' | 'info' | 'primary' {
   return SKIP_TAG[type ?? ''] ?? 'info';
+}
+/** 加签留痕的 skipType 为 NONE，展示以 cooperateType 优先（6=加签、7=减签） */
+function effType(item: WorkflowHisTask): string | undefined {
+  if (item.cooperateType === 6) return 'ADD_SIGNATURE';
+  if (item.cooperateType === 7) return 'REDUCTION_SIGNATURE';
+  return item.skipType;
 }
 
 // ---------- 列表（readFlag 走后端过滤） ----------
