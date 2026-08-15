@@ -86,6 +86,28 @@ export interface StartInstanceCmd {
   ccUserIds?: string[];
 }
 
+/** 抄送记录（S80 抄送我的） */
+export interface WorkflowCc {
+  id: string;
+  instanceId: string;
+  flowName?: string;
+  creatorName?: string;
+  flowStatus?: string;
+  nodeName?: string;
+  readFlag?: number;
+  readTime?: string;
+  createTime?: string;
+  [key: string]: unknown;
+}
+
+export interface CcPageQuery {
+  pageNum: number;
+  pageSize: number;
+  flowName?: string;
+  /** 已读过滤：0 未读 1 已读 */
+  readFlag?: number;
+}
+
 /** 待办分页 */
 export function pagePendingTasks(query: TaskPageQuery): Promise<PageResult<WorkflowTask>> {
   return get<PageResult<WorkflowTask>>('/workflow/task/pending/page', query as unknown as Record<string, unknown>);
@@ -129,4 +151,14 @@ export function urgeInstance(instanceId: string): Promise<void> {
 /** 撤回（仅发起人、仅待提交/进行中首节点未处理口径由后端校验） */
 export function revokeInstance(instanceId: string): Promise<void> {
   return put<void>(`/workflow/instance/${instanceId}/revoke`);
+}
+
+/** 抄送我的分页（S80） */
+export function pageCcMine(query: CcPageQuery): Promise<PageResult<WorkflowCc>> {
+  return get<PageResult<WorkflowCc>>('/workflow/cc/page', query as unknown as Record<string, unknown>);
+}
+
+/** 抄送标记已读（S80，幂等） */
+export function markCcRead(id: string): Promise<void> {
+  return put<void>(`/workflow/cc/${id}/read`);
 }
