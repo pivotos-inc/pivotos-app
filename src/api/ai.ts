@@ -25,13 +25,35 @@ export interface AiConversation {
   updateTime?: string;
 }
 
-/** AI 对话消息（对齐 ChatMessageVO） */
+/** AI 对话消息（对齐 ChatMessageVO；references 为 S68 持久化的引用列表，历史回放用） */
 export interface AiChatMessage {
   id: string;
   conversationId: string;
   role: 'user' | 'assistant';
   content: string;
+  /** 引用来源（assistant 消息，可能为空数组） */
+  references?: AiChatReference[];
   createTime?: string;
+}
+
+/** 引用来源（对齐 ChatReferenceVO，S68 溯源契约） */
+export interface AiChatReference {
+  kbId?: string;
+  kbName?: string;
+  docId?: string;
+  chunkId?: string;
+  fileName?: string;
+  /** 命中文本块（后端截取前 200 字） */
+  content?: string;
+  score?: number;
+}
+
+/** 知识库下拉选项（对齐 KbSimpleOptionVO） */
+export interface AiKbOption {
+  id: string;
+  name: string;
+  /** 查询改写开关（S68） */
+  queryRewrite?: boolean;
 }
 
 /** 对话请求体（conversationId 为空 = 新建会话） */
@@ -42,6 +64,8 @@ export interface AiChatSendBody {
   providerId?: string;
   /** 模型名（空 = 供应商默认模型） */
   model?: string;
+  /** 选中知识库 id 列表（S75：RAG 检索范围，空 = 不启用 RAG） */
+  kbIds?: string[];
 }
 
 /** SSE meta 事件载荷 */
@@ -49,12 +73,18 @@ export interface AiChatStreamMeta {
   conversationId: string;
   userMessageId: string;
   title: string;
+  /** 查询改写后的实际检索词（S68，未改写时不携带） */
+  rewrittenQuery?: string;
+  /** 意图路由出局：本轮未走知识库检索（S69） */
+  kbRoutedOut?: boolean;
 }
 
 /** SSE done 事件载荷 */
 export interface AiChatStreamDone {
   conversationId: string;
   messageId: string;
+  /** 引用来源（S68，随末帧送达；移动端 sse.ts 已有 flush 兜底） */
+  references?: AiChatReference[];
 }
 
 /** 供应商下拉选项（对齐 ProviderOptionVO） */
@@ -96,6 +126,11 @@ export function listProviderOptions(): Promise<AiProviderOption[]> {
 /** 供应商可用模型（后端动态查 /models，5 分钟缓存） */
 export function listProviderModels(providerId: string): Promise<string[]> {
   return get<string[]>(`/ai/provider/${providerId}/models`);
+}
+
+/** 知识库下拉选项（对话页 RAG 选择用；kb 插件未部署时返回空数组，S75） */
+export function listKbOptions(): Promise<AiKbOption[]> {
+  return get<AiKbOption[]>('/ai/chat/kb-options', undefined, { silent: true });
 }
 
 /* ================= 流式对话 ================= */
