@@ -72,6 +72,27 @@
 					"style": {
 						"navigationBarTitleText": "审批详情"
 					}
+				},
+				{
+					"path": "workflow/started",
+					"style": {
+						"navigationBarTitleText": "我的流程",
+						"enablePullDownRefresh": true
+					}
+				},
+				{
+					"path": "workflow/cc",
+					"style": {
+						"navigationBarTitleText": "抄送我的",
+						"enablePullDownRefresh": true
+					}
+				},
+				{
+					"path": "workflow/pending",
+					"style": {
+						"navigationBarTitleText": "我的待办",
+						"enablePullDownRefresh": true
+					}
 				}
 			]
 		},

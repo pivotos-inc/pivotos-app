@@ -42,6 +42,7 @@ import { ref } from 'vue';
 import { onShow, onPullDownRefresh } from '@dcloudio/uni-app';
 import { getWorkbenchItems, type WorkbenchItem } from '@/api/workbench';
 import { unreadCount } from '@/api/message';
+import { syncUnreadBadge } from '@/composables/useUnreadBadge';
 import { listAnnouncements, type AnnouncementItem } from '@/api/announcement';
 
 const items = ref<WorkbenchItem[]>([]);
@@ -58,6 +59,24 @@ const AI_ENTRY: WorkbenchItem = {
   sort: 0,
 };
 
+/** 我的流程固定入口（S79：发起/进度移动端补齐，与 AI 助手同口径前端内置） */
+const WORKFLOW_ENTRY: WorkbenchItem = {
+  id: 'workflow-started',
+  menuName: '我的流程',
+  icon: '',
+  path: '/pages-sub/workflow/started',
+  sort: 0,
+};
+
+/** 我的待办固定入口（S81：审批/加签移动端入口） */
+const PENDING_ENTRY: WorkbenchItem = {
+  id: 'workflow-pending',
+  menuName: '我的待办',
+  icon: '',
+  path: '/pages-sub/workflow/pending',
+  sort: 0,
+};
+
 async function loadData() {
   try {
     const [grid, count, notices] = await Promise.all([
@@ -65,15 +84,11 @@ async function loadData() {
       unreadCount().catch(() => 0),
       listAnnouncements(3).catch(() => [] as AnnouncementItem[]),
     ]);
-    items.value = [AI_ENTRY, ...grid];
+    items.value = [AI_ENTRY, WORKFLOW_ENTRY, PENDING_ENTRY, ...grid];
     unread.value = Number(count) || 0;
     announcements.value = notices;
-    // 消息 tab 角标同步
-    if (unread.value > 0) {
-      uni.setTabBarBadge({ index: 1, text: String(unread.value) });
-    } else {
-      uni.removeTabBarBadge({ index: 1 });
-    }
+    // 消息 tab 角标同步（S84 收口到 useUnreadBadge，传入已取到的未读数免重复请求）
+    syncUnreadBadge(unread.value);
   } finally {
     loaded.value = true;
     uni.stopPullDownRefresh();

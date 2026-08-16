@@ -24,6 +24,11 @@
         class="message"
         :class="`message--${msg.role}`"
       >
+        <!-- S75：改写/路由提示（互斥，与 PC 同口径） -->
+        <view v-if="msg.role === 'assistant' && (msg.kbRoutedOut || msg.rewrittenQuery)" class="rag-hint">
+          <text v-if="msg.kbRoutedOut">本轮未走知识库检索，直接由模型回答</text>
+          <text v-else>检索词已智能改写：{{ msg.rewrittenQuery }}</text>
+        </view>
         <view class="bubble">
           <text v-if="msg.role === 'assistant' && !msg.content && streaming" class="typing">
             正在思考…
@@ -32,13 +37,46 @@
           <text v-else user-select>{{ msg.content }}</text>
           <text v-if="showCursor(msg, index)" class="cursor">▍</text>
         </view>
+        <!-- S75：引用来源块（默认收起，展开看全部条目；content 后端已截 200 字） -->
+        <view v-if="msg.role === 'assistant' && msg.references?.length" class="refs">
+          <view class="refs-summary" @click="msg.refsOpen = !msg.refsOpen">
+            <wd-icon name="link" size="24rpx" />
+            <text>引用来源（{{ msg.references.length }}）</text>
+            <wd-icon :name="msg.refsOpen ? 'arrow-up' : 'arrow-down'" size="24rpx" />
+          </view>
+          <view v-if="msg.refsOpen" class="refs-list">
+            <view v-for="(ref, refIdx) in msg.references" :key="refIdx" class="ref-item">
+              <view class="ref-head">
+                <text class="ref-index">[{{ refIdx + 1 }}]</text>
+                <text class="ref-file">{{ ref.fileName || '未知文件' }}</text>
+                <text v-if="ref.score != null" class="ref-score">{{ ref.score.toFixed(3) }}</text>
+              </view>
+              <text v-if="ref.kbName" class="ref-kb">知识库：{{ ref.kbName }}</text>
+              <text v-if="ref.content" class="ref-content" user-select>{{ ref.content }}</text>
+            </view>
+          </view>
+        </view>
       </view>
       <!-- 底部占位，避免输入区遮挡最后一条 -->
       <view class="messages-bottom" />
     </scroll-view>
 
-    <!-- 输入区：供应商/模型双下拉 + 输入框 + 发送/停止 -->
+    <!-- 输入区：知识库 chip 横滑多选 + 供应商/模型双下拉 + 输入框 + 发送/停止 -->
     <view class="input-bar">
+      <!-- S75：知识库多选（chip 自绘，无知识库时隐藏不阻塞对话） -->
+      <scroll-view v-if="kbOptions.length > 0" class="kb-row" scroll-x>
+        <view class="kb-row-inner">
+          <view
+            v-for="kb in kbOptions"
+            :key="kb.id"
+            class="kb-chip"
+            :class="{ 'kb-chip--active': selectedKbIds.includes(kb.id), 'kb-chip--disabled': streaming }"
+            @click="toggleKb(kb.id)"
+          >
+            <text>{{ kb.name }}</text>
+          </view>
+        </view>
+      </scroll-view>
       <view class="selectors">
         <wd-picker
           v-model="providerId"
@@ -140,12 +178,15 @@ import { onShow } from '@dcloudio/uni-app';
 import {
   deleteConversation,
   listConversations,
+  listKbOptions,
   listMessages,
   listProviderModels,
   listProviderOptions,
   renameConversation,
   streamChat,
+  type AiChatReference,
   type AiConversation,
+  type AiKbOption,
   type AiProviderOption,
   type ChatStreamHandle,
 } from '@/api/ai';
@@ -158,6 +199,14 @@ interface LocalMessage {
   content: string;
   /** assistant 消息的 rich-text nodes（renderMarkdown 产物，XSS 安全） */
   html?: string;
+  /** 引用来源（S75：done 事件送达或历史回放） */
+  references?: AiChatReference[];
+  /** 引用块展开态（默认收起） */
+  refsOpen?: boolean;
+  /** 查询改写后的实际检索词（S68，互斥提示用） */
+  rewrittenQuery?: string;
+  /** 意图路由出局：本轮未走知识库检索（S69） */
+  kbRoutedOut?: boolean;
 }
 
 // ---------- 会话列表 ----------
@@ -185,6 +234,8 @@ async function switchConversation(id: string): Promise<void> {
     role: m.role,
     content: m.content,
     html: m.role === 'assistant' ? renderMarkdown(m.content) : undefined,
+    // S75：历史消息 references 回放（旧消息无引用属正常）
+    references: m.references?.length ? m.references : undefined,
   }));
   scrollToBottom();
 }
@@ -289,6 +340,26 @@ function pinRecentModels(providerKey: string, all: string[]): string[] {
   return [...recent, ...all.filter((m) => !recent.includes(m))];
 }
 
+// ---------- 知识库多选（S75：RAG 检索范围，与 PC 同契约） ----------
+const kbOptions = ref<AiKbOption[]>([]);
+/** 选中知识库 id 列表，空 = 不启用 RAG */
+const selectedKbIds = ref<string[]>([]);
+
+async function loadKbOptions(): Promise<void> {
+  // 未配置知识库不阻塞对话（silent，入口自动隐藏）
+  const options = await listKbOptions().catch(() => []);
+  kbOptions.value = options;
+  // 已选知识库被删除/禁用时剔除
+  selectedKbIds.value = selectedKbIds.value.filter((id) => options.some((o) => o.id === id));
+}
+
+function toggleKb(id: string): void {
+  if (streaming.value) return;
+  const idx = selectedKbIds.value.indexOf(id);
+  if (idx >= 0) selectedKbIds.value.splice(idx, 1);
+  else selectedKbIds.value.push(id);
+}
+
 // ---------- 流式对话 ----------
 const input = ref('');
 const streaming = ref(false);
@@ -312,6 +383,7 @@ async function handleSend(): Promise<void> {
       content,
       providerId: providerId.value || undefined,
       model: model.value || undefined,
+      kbIds: selectedKbIds.value.length > 0 ? selectedKbIds.value : undefined,
     },
     {
       onMeta(meta) {
@@ -319,6 +391,12 @@ async function handleSend(): Promise<void> {
         if (!activeId.value) {
           activeId.value = meta.conversationId;
           void loadConversations();
+        }
+        // S75：改写/路由提示（互斥，与 PC 同口径）
+        if (meta.kbRoutedOut) {
+          assistant.kbRoutedOut = true;
+        } else if (meta.rewrittenQuery) {
+          assistant.rewrittenQuery = meta.rewrittenQuery;
         }
       },
       onDelta(delta) {
@@ -329,6 +407,10 @@ async function handleSend(): Promise<void> {
       },
       onDone(done) {
         assistant.id = done.messageId;
+        // S75：引用来源随末帧送达（sse.ts 已有 flush 兜底，不会丢帧）
+        if (done.references?.length) {
+          assistant.references = done.references;
+        }
         // 本次实际选用的模型计入「常用」（S45 ④）
         recordRecentModel();
         // 会话 updateTime 变化，刷新排序
@@ -405,6 +487,7 @@ function formatTime(time?: string): string {
 onShow(() => {
   void loadConversations();
   void loadProviders();
+  void loadKbOptions();
 });
 </script>
 
@@ -561,6 +644,98 @@ onShow(() => {
 }
 .messages-bottom {
   height: 24rpx;
+}
+
+/* ---------- S75：改写/路由提示 ---------- */
+.rag-hint {
+  width: 100%;
+  margin-bottom: 8rpx;
+  font-size: 22rpx;
+  color: #909399;
+}
+
+/* ---------- S75：引用来源块 ---------- */
+.refs {
+  width: 100%;
+  margin-top: 8rpx;
+  background: #fff;
+  border-radius: 12rpx;
+  padding: 12rpx 20rpx;
+  font-size: 24rpx;
+}
+.refs-summary {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  color: #4d80f0;
+}
+.refs-list {
+  margin-top: 12rpx;
+}
+.ref-item {
+  padding: 12rpx 0;
+  border-top: 1rpx solid #f0f0f0;
+}
+.ref-head {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+.ref-index {
+  color: #4d80f0;
+  font-weight: 600;
+}
+.ref-file {
+  flex: 1;
+  color: #333;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ref-score {
+  color: #999;
+  font-size: 22rpx;
+}
+.ref-kb {
+  display: block;
+  margin-top: 4rpx;
+  color: #909399;
+  font-size: 22rpx;
+}
+.ref-content {
+  display: block;
+  margin-top: 8rpx;
+  color: #666;
+  line-height: 1.6;
+}
+
+/* ---------- S75：知识库 chip 横滑多选 ---------- */
+.kb-row {
+  margin-bottom: 12rpx;
+  white-space: nowrap;
+}
+.kb-row-inner {
+  display: inline-flex;
+  gap: 12rpx;
+  padding: 4rpx 0;
+}
+.kb-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 20rpx;
+  background: #f5f6fa;
+  border: 1rpx solid transparent;
+  border-radius: 24rpx;
+  font-size: 24rpx;
+  color: #666;
+}
+.kb-chip--active {
+  background: #eef3fe;
+  border-color: #4d80f0;
+  color: #4d80f0;
+}
+.kb-chip--disabled {
+  opacity: 0.5;
 }
 
 /* ---------- 输入区 ---------- */
