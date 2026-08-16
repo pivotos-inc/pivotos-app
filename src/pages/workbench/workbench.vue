@@ -42,6 +42,7 @@ import { ref } from 'vue';
 import { onShow, onPullDownRefresh } from '@dcloudio/uni-app';
 import { getWorkbenchItems, type WorkbenchItem } from '@/api/workbench';
 import { unreadCount } from '@/api/message';
+import { syncUnreadBadge } from '@/composables/useUnreadBadge';
 import { listAnnouncements, type AnnouncementItem } from '@/api/announcement';
 
 const items = ref<WorkbenchItem[]>([]);
@@ -86,12 +87,8 @@ async function loadData() {
     items.value = [AI_ENTRY, WORKFLOW_ENTRY, PENDING_ENTRY, ...grid];
     unread.value = Number(count) || 0;
     announcements.value = notices;
-    // 消息 tab 角标同步
-    if (unread.value > 0) {
-      uni.setTabBarBadge({ index: 1, text: String(unread.value) });
-    } else {
-      uni.removeTabBarBadge({ index: 1 });
-    }
+    // 消息 tab 角标同步（S84 收口到 useUnreadBadge，传入已取到的未读数免重复请求）
+    syncUnreadBadge(unread.value);
   } finally {
     loaded.value = true;
     uni.stopPullDownRefresh();
