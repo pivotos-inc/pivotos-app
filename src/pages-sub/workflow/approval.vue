@@ -56,6 +56,10 @@
           <wd-button type="warning" block plain :loading="actionLoading" @click="openAddSignature">加签</wd-button>
           <wd-button type="warning" block plain :loading="actionLoading" @click="openReductionSignature">减签</wd-button>
         </view>
+        <view class="action-buttons sub">
+          <wd-button type="warning" block plain :loading="actionLoading" @click="openTransfer('transfer')">转办</wd-button>
+          <wd-button type="warning" block plain :loading="actionLoading" @click="openTransfer('depute')">委派</wd-button>
+        </view>
       </view>
     </template>
     <wd-status-tip v-else-if="loaded" image="content" tip="任务不存在或已处理" />
@@ -75,6 +79,24 @@
         <view class="addsign-buttons">
           <wd-button block plain @click="addSignVisible = false">取消</wd-button>
           <wd-button block type="primary" :loading="actionLoading" @click="handleAddSignature">提交</wd-button>
+        </view>
+      </view>
+    </wd-popup>
+
+    <!-- 转办/委派弹窗（S93：单选目标用户；委派语义为代审后回到委派人确认） -->
+    <wd-popup v-model="transferVisible" position="bottom" :close-on-click-modal="false" custom-style="border-radius: 24rpx 24rpx 0 0; padding: 32rpx;">
+      <view class="addsign-form">
+        <view class="addsign-title">{{ transferMode === 'depute' ? '委派（代审后回到您确认）' : '转办（转交给目标用户）' }}</view>
+        <wd-input v-model="optionKeyword" placeholder="搜索用户名/昵称" clearable @change="reloadOptions" @clear="reloadOptions" />
+        <wd-select-picker
+          v-model="transferUserId"
+          :columns="userOptionColumns"
+          label="选择目标用户"
+          placeholder="请选择目标用户"
+        />
+        <view class="addsign-buttons">
+          <wd-button block plain @click="transferVisible = false">取消</wd-button>
+          <wd-button block type="primary" :loading="actionLoading" @click="handleTransfer">提交</wd-button>
         </view>
       </view>
     </wd-popup>
@@ -111,6 +133,8 @@ import {
   addSignature,
   taskApprovers,
   reductionSignature,
+  transferTask,
+  deputeTask,
   type WorkflowTask,
   type WorkflowHisTask,
   type UserOption,
@@ -157,8 +181,10 @@ function skipTagType(type?: string): 'success' | 'danger' | 'warning' | 'info' |
   return SKIP_TAG[type ?? ''] ?? 'info';
 }
 
-/** 加签留痕的 skipType 为 NONE，展示以 cooperateType 优先（6=加签） */
+/** 转办/委派/加签留痕的 skipType 为 NONE，展示以 cooperateType 优先（2=转办、3=委派、6=加签、7=减签，S93 补转办/委派） */
 function effType(item: WorkflowHisTask): string | undefined {
+  if (item.cooperateType === 2) return 'TRANSFER';
+  if (item.cooperateType === 3) return 'DEPUTE';
   if (item.cooperateType === 6) return 'ADD_SIGNATURE';
   if (item.cooperateType === 7) return 'REDUCTION_SIGNATURE';
   return item.skipType;
@@ -255,6 +281,42 @@ async function handleAddSignature(): Promise<void> {
     addSignVisible.value = false;
     addSignUserIds.value = [];
     historyList.value = await taskHistory(task.value.instanceId);
+  } finally {
+    actionLoading.value = false;
+  }
+}
+
+// ---------- 转办/委派（S93） ----------
+const transferVisible = ref(false);
+const transferMode = ref<'transfer' | 'depute'>('transfer');
+const transferUserId = ref('');
+
+async function openTransfer(mode: 'transfer' | 'depute'): Promise<void> {
+  transferMode.value = mode;
+  transferUserId.value = '';
+  transferVisible.value = true;
+  if (options.value.length === 0) {
+    await reloadOptions();
+  }
+}
+
+async function handleTransfer(): Promise<void> {
+  if (!task.value) return;
+  if (!transferUserId.value) {
+    uni.showToast({ title: '请选择目标用户', icon: 'none' });
+    return;
+  }
+  actionLoading.value = true;
+  try {
+    const cmd = { taskId: task.value.id, targetUserId: transferUserId.value, message: message.value || undefined };
+    if (transferMode.value === 'depute') {
+      await deputeTask(cmd);
+    } else {
+      await transferTask(cmd);
+    }
+    uni.showToast({ title: transferMode.value === 'depute' ? '委派成功' : '转办成功', icon: 'success' });
+    transferVisible.value = false;
+    setTimeout(() => uni.navigateBack(), 1000);
   } finally {
     actionLoading.value = false;
   }
