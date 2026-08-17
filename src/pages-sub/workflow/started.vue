@@ -137,11 +137,11 @@ function statusTagType(status?: string): 'success' | 'danger' | 'warning' | 'inf
 
 const SKIP_LABEL: Record<string, string> = {
   PASS: '通过', REJECT: '驳回', NONE: '无动作', TRANSFER: '转办', DEPUTE: '委派',
-  ADD_SIGNATURE: '加签', REDUCTION_SIGNATURE: '减签',
+  ADD_SIGNATURE: '加签', REDUCTION_SIGNATURE: '减签', COUNTERSIGN: '会签', VOTE: '票签',
 };
 const SKIP_TAG: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'primary'> = {
   PASS: 'success', REJECT: 'danger', NONE: 'info', TRANSFER: 'warning', DEPUTE: 'warning',
-  ADD_SIGNATURE: 'warning', REDUCTION_SIGNATURE: 'warning',
+  ADD_SIGNATURE: 'warning', REDUCTION_SIGNATURE: 'warning', COUNTERSIGN: 'primary', VOTE: 'primary',
 };
 function skipLabel(type?: string): string {
   return SKIP_LABEL[type ?? ''] ?? type ?? '-';
@@ -149,10 +149,12 @@ function skipLabel(type?: string): string {
 function skipTagType(type?: string): 'success' | 'danger' | 'warning' | 'info' | 'primary' {
   return SKIP_TAG[type ?? ''] ?? 'info';
 }
-/** 转办/委派/加签留痕 skipType=NONE，展示以 cooperateType 优先（2=转办、3=委派、6=加签、7=减签，S93 补转办/委派） */
+/** 转办/委派/加签/会签/票签留痕 skipType=NONE，展示以 cooperateType 优先（2=转办、3=委派、4=会签、5=票签、6=加签、7=减签；S93 补转办/委派，S94 补会签/票签） */
 function effType(item: WorkflowHisTask): string | undefined {
   if (item.cooperateType === 2) return 'TRANSFER';
   if (item.cooperateType === 3) return 'DEPUTE';
+  if (item.cooperateType === 4) return 'COUNTERSIGN';
+  if (item.cooperateType === 5) return 'VOTE';
   if (item.cooperateType === 6) return 'ADD_SIGNATURE';
   if (item.cooperateType === 7) return 'REDUCTION_SIGNATURE';
   return item.skipType;
