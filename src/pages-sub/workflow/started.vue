@@ -53,6 +53,13 @@
           placeholder="请选择流程"
         />
         <wd-input v-model="startForm.businessName" label="业务名称" placeholder="请输入业务名称（可选）" clearable />
+        <!-- 流程变量（S93）：供条件分支网关使用，如请假天数分档审批 -->
+        <view v-for="(row, i) in startVars" :key="i" class="var-row">
+          <wd-input v-model="row.key" placeholder="变量名（如 days）" custom-class="var-key" />
+          <wd-input v-model="row.value" placeholder="值（如 3）" custom-class="var-value" />
+          <view class="var-del" @click="removeStartVar(i)">删除</view>
+        </view>
+        <wd-button size="small" plain block custom-class="var-add" @click="addStartVar">+ 添加流程变量（可选）</wd-button>
         <view class="start-buttons">
           <wd-button block plain @click="startVisible = false">取消</wd-button>
           <wd-button block type="primary" :loading="startLoading" @click="handleStart">提交</wd-button>
@@ -129,10 +136,12 @@ function statusTagType(status?: string): 'success' | 'danger' | 'warning' | 'inf
 }
 
 const SKIP_LABEL: Record<string, string> = {
-  PASS: '通过', REJECT: '驳回', NONE: '无动作', ADD_SIGNATURE: '加签', REDUCTION_SIGNATURE: '减签',
+  PASS: '通过', REJECT: '驳回', NONE: '无动作', TRANSFER: '转办', DEPUTE: '委派',
+  ADD_SIGNATURE: '加签', REDUCTION_SIGNATURE: '减签', COUNTERSIGN: '会签', VOTE: '票签',
 };
 const SKIP_TAG: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'primary'> = {
-  PASS: 'success', REJECT: 'danger', NONE: 'info', ADD_SIGNATURE: 'warning', REDUCTION_SIGNATURE: 'warning',
+  PASS: 'success', REJECT: 'danger', NONE: 'info', TRANSFER: 'warning', DEPUTE: 'warning',
+  ADD_SIGNATURE: 'warning', REDUCTION_SIGNATURE: 'warning', COUNTERSIGN: 'primary', VOTE: 'primary',
 };
 function skipLabel(type?: string): string {
   return SKIP_LABEL[type ?? ''] ?? type ?? '-';
@@ -140,8 +149,12 @@ function skipLabel(type?: string): string {
 function skipTagType(type?: string): 'success' | 'danger' | 'warning' | 'info' | 'primary' {
   return SKIP_TAG[type ?? ''] ?? 'info';
 }
-/** 加签留痕 skipType=NONE，展示以 cooperateType 优先（S81） */
+/** 转办/委派/加签/会签/票签留痕 skipType=NONE，展示以 cooperateType 优先（2=转办、3=委派、4=会签、5=票签、6=加签、7=减签；S93 补转办/委派，S94 补会签/票签） */
 function effType(item: WorkflowHisTask): string | undefined {
+  if (item.cooperateType === 2) return 'TRANSFER';
+  if (item.cooperateType === 3) return 'DEPUTE';
+  if (item.cooperateType === 4) return 'COUNTERSIGN';
+  if (item.cooperateType === 5) return 'VOTE';
   if (item.cooperateType === 6) return 'ADD_SIGNATURE';
   if (item.cooperateType === 7) return 'REDUCTION_SIGNATURE';
   return item.skipType;
@@ -219,6 +232,28 @@ const startLoading = ref(false);
 const definitions = ref<WorkflowDefinition[]>([]);
 const startForm = reactive({ flowCode: '', businessName: '' });
 
+// 流程变量（S93）：键值对录入，供网关节点条件表达式（如 eq@@days|3）消费
+const startVars = ref<{ key: string; value: string }[]>([]);
+
+function addStartVar(): void {
+  startVars.value.push({ key: '', value: '' });
+}
+
+function removeStartVar(index: number): void {
+  startVars.value.splice(index, 1);
+}
+
+/** 组装 variable：纯整数转 number（条件比较走 String.valueOf，数字口径更稳） */
+function buildStartVariable(): Record<string, string | number> | undefined {
+  const variable: Record<string, string | number> = {};
+  for (const row of startVars.value) {
+    const key = row.key.trim();
+    if (!key) continue;
+    variable[key] = /^-?\d+$/.test(row.value.trim()) ? Number(row.value.trim()) : row.value.trim();
+  }
+  return Object.keys(variable).length > 0 ? variable : undefined;
+}
+
 const definitionOptions = computed(() =>
   definitions.value
     .filter((d) => d.activityStatus === 1)
@@ -243,11 +278,13 @@ async function handleStart(): Promise<void> {
     await startInstance({
       flowCode: startForm.flowCode,
       businessName: startForm.businessName || undefined,
+      variable: buildStartVariable(),
     });
     uni.showToast({ title: '发起成功', icon: 'success' });
     startVisible.value = false;
     startForm.flowCode = '';
     startForm.businessName = '';
+    startVars.value = [];
     await loadList(true);
   } finally {
     startLoading.value = false;
@@ -382,6 +419,26 @@ function handleRevoke(): void {
   font-weight: 600;
   color: #2c405a;
   margin-bottom: 24rpx;
+}
+.var-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 8rpx 0;
+}
+.var-key {
+  flex: 2;
+}
+.var-value {
+  flex: 3;
+}
+.var-del {
+  font-size: 26rpx;
+  color: #f56c6c;
+  padding: 0 12rpx;
+}
+.var-add {
+  margin: 8rpx 0 16rpx;
 }
 .start-buttons {
   display: flex;

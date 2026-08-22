@@ -86,6 +86,8 @@ export interface StartInstanceCmd {
   flowCode: string;
   businessName?: string;
   ccUserIds?: string[];
+  /** 流程变量（S93）：供网关节点条件表达式消费，如 { days: 3 } */
+  variable?: Record<string, unknown>;
 }
 
 /** 抄送记录（S80 抄送我的） */
@@ -123,6 +125,16 @@ export function passTask(cmd: TaskActionCmd): Promise<void> {
 /** 驳回 */
 export function rejectTask(cmd: TaskActionCmd): Promise<void> {
   return put<void>('/workflow/task/reject', cmd);
+}
+
+/** 转办（S93）：将任务转交给目标用户 */
+export function transferTask(cmd: TaskActionCmd): Promise<void> {
+  return put<void>('/workflow/task/transfer', cmd);
+}
+
+/** 委派（S93）：受托人代审，通过后回到委派人确认 */
+export function deputeTask(cmd: TaskActionCmd): Promise<void> {
+  return put<void>('/workflow/task/depute', cmd);
 }
 
 /** 审批历史 */
