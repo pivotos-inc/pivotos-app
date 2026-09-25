@@ -49,6 +49,9 @@
           clearable
         />
         <view class="action-buttons">
+          <wd-button type="info" block plain @click="openAdvice">AI 审批建议</wd-button>
+        </view>
+        <view class="action-buttons">
           <wd-button type="error" block :loading="actionLoading" @click="handleReject">驳回</wd-button>
           <wd-button type="primary" block :loading="actionLoading" @click="handlePass">通过</wd-button>
         </view>
@@ -63,6 +66,9 @@
       </view>
     </template>
     <wd-status-tip v-else-if="loaded" image="content" tip="任务不存在或已处理" />
+
+    <!-- AI 审批建议弹窗（S101 A3 移动端接入） -->
+    <ApprovalAdvicePopup v-if="task" v-model="adviceVisible" :task-id="task.id" />
 
     <!-- 加签弹窗（S81） -->
     <wd-popup v-model="addSignVisible" position="bottom" :close-on-click-modal="false" custom-style="border-radius: 24rpx 24rpx 0 0; padding: 32rpx;">
@@ -139,6 +145,14 @@ import {
   type WorkflowHisTask,
   type UserOption,
 } from '@/api/workflow';
+import ApprovalAdvicePopup from './ApprovalAdvicePopup.vue';
+
+// ---------- AI 审批建议（S101 A3 移动端接入） ----------
+const adviceVisible = ref(false);
+
+function openAdvice(): void {
+  adviceVisible.value = true;
+}
 
 const task = ref<WorkflowTask>();
 const historyList = ref<WorkflowHisTask[]>([]);
@@ -372,7 +386,7 @@ async function handleReductionSignature(): Promise<void> {
 .approval-page {
   min-height: 100vh;
   padding: 24rpx;
-  padding-bottom: 320rpx;
+  padding-bottom: 420rpx;
   box-sizing: border-box;
   background: #f5f6fa;
 }

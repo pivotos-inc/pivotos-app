@@ -150,8 +150,11 @@ export interface ChatStreamHandle {
   done: Promise<void>;
 }
 
-/** 解析单帧并分发回调（两端共用） */
-function dispatchFrame(frame: SseFrame, callbacks: ChatStreamCallbacks): boolean {
+/** SSE 事件分发器：返回 true 表示该帧被识别消费（小程序端据此区分真流式与错误 JSON 整包） */
+type SseDispatch = (frame: SseFrame) => boolean;
+
+/** 解析单帧并分发对话回调 */
+function dispatchChatFrame(frame: SseFrame, callbacks: ChatStreamCallbacks): boolean {
   try {
     const payload = JSON.parse(frame.data) as Record<string, string>;
     switch (frame.event) {
@@ -177,24 +180,42 @@ function dispatchFrame(frame: SseFrame, callbacks: ChatStreamCallbacks): boolean
 
 /** 流式对话统一入口（按端分派实现） */
 export function streamChat(body: AiChatSendBody, callbacks: ChatStreamCallbacks): ChatStreamHandle {
+  return streamSse('/ai/chat/stream', body, (frame) => dispatchChatFrame(frame, callbacks), callbacks.onError);
+}
+
+/**
+ * SSE 流式统一入口（按端分派实现，S101 抽通用供审批建议链路复用）：
+ * path 为 /ai/ 下相对路径；dispatch 负责帧识别与回调分发；onError 统一错误出口。
+ */
+function streamSse(
+  path: string,
+  body: unknown,
+  dispatch: SseDispatch,
+  onError?: (msg: string) => void,
+): ChatStreamHandle {
   let handle: ChatStreamHandle | null = null;
   // #ifdef H5
-  handle = streamByFetch(body, callbacks);
+  handle = streamByFetch(path, body, dispatch, onError);
   // #endif
   // #ifndef H5
-  handle = streamByChunkedRequest(body, callbacks);
+  handle = streamByChunkedRequest(path, body, dispatch, onError);
   // #endif
   return handle!;
 }
 
 // #ifdef H5
 /** H5：fetch + ReadableStream（同 PC 端方案） */
-function streamByFetch(body: AiChatSendBody, callbacks: ChatStreamCallbacks): ChatStreamHandle {
+function streamByFetch(
+  path: string,
+  body: unknown,
+  dispatch: SseDispatch,
+  onError?: (msg: string) => void,
+): ChatStreamHandle {
   const controller = new AbortController();
   const done = (async () => {
     let response: Response;
     try {
-      response = await fetch(`${API_BASE_URL}/ai/chat/stream`, {
+      response = await fetch(`${API_BASE_URL}${path}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -207,7 +228,7 @@ function streamByFetch(body: AiChatSendBody, callbacks: ChatStreamCallbacks): Ch
       });
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
-        callbacks.onError?.('网络异常，请稍后重试');
+        onError?.('网络异常，请稍后重试');
       }
       return;
     }
@@ -221,13 +242,13 @@ function streamByFetch(body: AiChatSendBody, callbacks: ChatStreamCallbacks): Ch
       } catch {
         /* 非 JSON 响应体，保留默认提示 */
       }
-      callbacks.onError?.(msg);
+      onError?.(msg);
       return;
     }
 
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
-    const parser = createSseFrameParser((frame) => dispatchFrame(frame, callbacks));
+    const parser = createSseFrameParser((frame) => dispatch(frame));
     try {
       for (;;) {
         const { done: finished, value } = await reader.read();
@@ -239,7 +260,7 @@ function streamByFetch(body: AiChatSendBody, callbacks: ChatStreamCallbacks): Ch
       parser.flush();
     } catch (e) {
       if ((e as Error).name !== 'AbortError') {
-        callbacks.onError?.('连接中断，请稍后重试');
+        onError?.('连接中断，请稍后重试');
       }
     }
   })();
@@ -250,8 +271,10 @@ function streamByFetch(body: AiChatSendBody, callbacks: ChatStreamCallbacks): Ch
 // #ifndef H5
 /** 小程序/App：uni.request enableChunked + onChunkReceived */
 function streamByChunkedRequest(
-  body: AiChatSendBody,
-  callbacks: ChatStreamCallbacks,
+  path: string,
+  body: unknown,
+  dispatch: SseDispatch,
+  onError?: (msg: string) => void,
 ): ChatStreamHandle {
   let aborted = false;
   /** 是否收到过合法 SSE 帧：区分「真流式」与「错误 JSON 整包返回」 */
@@ -261,7 +284,7 @@ function streamByChunkedRequest(
 
   const decode = createUtf8ChunkDecoder();
   const parser = createSseFrameParser((frame) => {
-    gotSseFrame = dispatchFrame(frame, callbacks) || gotSseFrame;
+    gotSseFrame = dispatch(frame) || gotSseFrame;
   });
 
   let task: UniApp.RequestTask | null = null;
@@ -278,13 +301,13 @@ function streamByChunkedRequest(
         } catch {
           /* 响应体非 JSON，保留兜底文案 */
         }
-        if (msg) callbacks.onError?.(msg);
+        if (msg) onError?.(msg);
       }
       resolve();
     };
 
     task = uni.request({
-      url: `${API_BASE_URL}/ai/chat/stream`,
+      url: `${API_BASE_URL}${path}`,
       method: 'POST',
       // uni.request 类型定义未含 enableChunked（微信端专有，基础库 ≥2.20.2），透传给 wx.request
       enableChunked: true,
@@ -327,3 +350,102 @@ function streamByChunkedRequest(
   };
 }
 // #endif
+
+/* ================= AI 审批助手（S101 A3 移动端接入） ================= */
+
+/** 审批建议制度引用（对齐 ApprovalReferenceVO） */
+export interface ApprovalAdviceReference {
+  /** 命中分块 ID */
+  chunkId?: string;
+  /** 来源文件名 */
+  fileName?: string;
+  /** 依据摘录（≤200 字） */
+  quote?: string;
+}
+
+/** 审批建议回显（对齐 ApprovalAdviceVO，GET /ai/approval/advice/{taskId}/latest） */
+export interface ApprovalAdvice {
+  id: string;
+  taskId: string;
+  /** 结论三态：approve 建议通过 / reject 建议驳回 / need_info 需补充材料 */
+  conclusion?: string;
+  reason?: string;
+  references?: ApprovalAdviceReference[];
+  kbId?: string;
+  createTime?: string;
+}
+
+/** 审批建议生成请求（对齐 ApprovalAdviceRequest；kbId 空 = 后端默认库策略） */
+export interface ApprovalAdviceBody {
+  taskId: string;
+  kbId?: string;
+}
+
+/** 审批建议 SSE meta 事件载荷 */
+export interface ApprovalAdviceStreamMeta {
+  taskId?: string;
+  instanceId?: string;
+  kbId?: string;
+  /** 免责声明：AI 建议仅供参考，审批责任仍归审批人 */
+  disclaimer?: string;
+}
+
+/** 审批建议 SSE done 事件载荷（建议落库完成，结构化结论在此帧） */
+export interface ApprovalAdviceStreamDone {
+  adviceId?: string;
+  conclusion?: string;
+  reason?: string;
+  references?: ApprovalAdviceReference[];
+  disclaimer?: string;
+}
+
+/** SSE 流式审批建议回调（事件序列 meta → delta* → done，异常 error） */
+export interface ApprovalAdviceStreamCallbacks {
+  onMeta?: (meta: ApprovalAdviceStreamMeta) => void;
+  onDelta?: (content: string) => void;
+  onDone?: (done: ApprovalAdviceStreamDone) => void;
+  onError?: (msg: string) => void;
+}
+
+/** 最近一条审批建议回显（仅本人记录；无记录返回 null；静默失败由调用方兜底） */
+export function latestApprovalAdvice(taskId: string): Promise<ApprovalAdvice | null> {
+  return get<ApprovalAdvice | null>(`/ai/approval/advice/${taskId}/latest`);
+}
+
+/** 解析单帧并分发审批建议回调 */
+function dispatchAdviceFrame(frame: SseFrame, callbacks: ApprovalAdviceStreamCallbacks): boolean {
+  try {
+    const payload = JSON.parse(frame.data) as Record<string, unknown>;
+    switch (frame.event) {
+      case 'meta':
+        callbacks.onMeta?.(payload as unknown as ApprovalAdviceStreamMeta);
+        return true;
+      case 'delta':
+        callbacks.onDelta?.((payload.content as string) ?? '');
+        return true;
+      case 'done':
+        callbacks.onDone?.(payload as unknown as ApprovalAdviceStreamDone);
+        return true;
+      case 'error':
+        callbacks.onError?.((payload.msg as string) || 'AI 建议生成失败');
+        return true;
+      default:
+        return false;
+    }
+  } catch {
+    return false; // 忽略无法解析的帧（如注释/心跳）
+  }
+}
+
+/** 流式生成审批建议：POST /ai/approval/advice/stream（复用 SSE 双端通用入口） */
+export function streamApprovalAdvice(
+  body: ApprovalAdviceBody,
+  callbacks: ApprovalAdviceStreamCallbacks,
+): ChatStreamHandle {
+  return streamSse(
+    '/ai/approval/advice/stream',
+    body,
+    (frame) => dispatchAdviceFrame(frame, callbacks),
+    callbacks.onError,
+  );
+}
