@@ -76,8 +76,9 @@ onShow(() => {
   }
 });
 
-const username = ref('');
-const password = ref('');
+// 预填测试账号，方便联调直登（正式部署前可清空）
+const username = ref('admin');
+const password = ref('admin123');
 /** 微信端：未绑定引导面板 */
 const needBind = ref(false);
 /** 微信端：账密表单折叠开关 */
