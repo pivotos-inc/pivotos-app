@@ -7,7 +7,10 @@
       <view v-for="item in list" :key="item.id" class="card" @click="goApproval(item)">
         <view class="card-head">
           <text class="flow-name">{{ item.flowName ?? '-' }}</text>
-          <wd-tag type="primary" size="small">待审批</wd-tag>
+          <!-- W1（S113）：待办口径含退回态（flow_status=9），此处按状态区分标签 -->
+          <wd-tag :type="item.flowStatus === '9' ? 'danger' : 'primary'" size="small">
+            {{ item.flowStatus === '9' ? '已退回' : '待审批' }}
+          </wd-tag>
         </view>
         <view class="card-row">
           <text class="label">当前节点</text>
