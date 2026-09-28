@@ -48,21 +48,29 @@
           :maxlength="500"
           clearable
         />
-        <view class="action-buttons">
-          <wd-button type="info" block plain @click="openAdvice">AI 审批建议</wd-button>
-        </view>
-        <view class="action-buttons">
-          <wd-button type="error" block :loading="actionLoading" @click="handleReject">驳回</wd-button>
-          <wd-button type="primary" block :loading="actionLoading" @click="handlePass">通过</wd-button>
-        </view>
-        <view class="action-buttons sub">
-          <wd-button type="warning" block plain :loading="actionLoading" @click="openAddSignature">加签</wd-button>
-          <wd-button type="warning" block plain :loading="actionLoading" @click="openReductionSignature">减签</wd-button>
-        </view>
-        <view class="action-buttons sub">
-          <wd-button type="warning" block plain :loading="actionLoading" @click="openTransfer('transfer')">转办</wd-button>
-          <wd-button type="warning" block plain :loading="actionLoading" @click="openTransfer('depute')">委派</wd-button>
-        </view>
+        <!-- W1（S113）：退回态任务由发起人重新提交，不提供通过/驳回/加签/减签/转办/委派 -->
+        <template v-if="isRejected">
+          <view class="action-buttons">
+            <wd-button type="primary" block :loading="actionLoading" @click="handleResubmit">重新提交</wd-button>
+          </view>
+        </template>
+        <template v-else>
+          <view class="action-buttons">
+            <wd-button type="info" block plain @click="openAdvice">AI 审批建议</wd-button>
+          </view>
+          <view class="action-buttons">
+            <wd-button type="error" block :loading="actionLoading" @click="handleReject">驳回</wd-button>
+            <wd-button type="primary" block :loading="actionLoading" @click="handlePass">通过</wd-button>
+          </view>
+          <view class="action-buttons sub">
+            <wd-button type="warning" block plain :loading="actionLoading" @click="openAddSignature">加签</wd-button>
+            <wd-button type="warning" block plain :loading="actionLoading" @click="openReductionSignature">减签</wd-button>
+          </view>
+          <view class="action-buttons sub">
+            <wd-button type="warning" block plain :loading="actionLoading" @click="openTransfer('transfer')">转办</wd-button>
+            <wd-button type="warning" block plain :loading="actionLoading" @click="openTransfer('depute')">委派</wd-button>
+          </view>
+        </template>
       </view>
     </template>
     <wd-status-tip v-else-if="loaded" image="content" tip="任务不存在或已处理" />
@@ -134,6 +142,7 @@ import {
   pagePendingTasks,
   passTask,
   rejectTask,
+  resubmitTask,
   taskHistory,
   userOptions,
   addSignature,
@@ -237,6 +246,28 @@ async function handleReject(): Promise<void> {
       try {
         await rejectTask({ taskId: task.value!.id, message: message.value || undefined });
         uni.showToast({ title: '已驳回', icon: 'none' });
+        setTimeout(() => uni.navigateBack(), 1000);
+      } finally {
+        actionLoading.value = false;
+      }
+    },
+  });
+}
+
+/** W1（S113）：退回态（flow_status=9）任务——由发起人重新提交，非审批态 */
+const isRejected = computed(() => task.value?.flowStatus === '9');
+
+async function handleResubmit(): Promise<void> {
+  if (!task.value) return;
+  uni.showModal({
+    title: '确认重新提交',
+    content: `确定重新提交「${task.value.flowName}」吗？`,
+    success: async (res) => {
+      if (!res.confirm) return;
+      actionLoading.value = true;
+      try {
+        await resubmitTask({ taskId: task.value!.id, message: message.value || undefined });
+        uni.showToast({ title: '已重新提交', icon: 'success' });
         setTimeout(() => uni.navigateBack(), 1000);
       } finally {
         actionLoading.value = false;
