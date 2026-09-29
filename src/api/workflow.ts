@@ -127,6 +127,14 @@ export function rejectTask(cmd: TaskActionCmd): Promise<void> {
   return put<void>('/workflow/task/reject', cmd);
 }
 
+/**
+ * 重新提交（S113 W1）：发起人把「已退回」任务重新提交。
+ * 引擎侧走 pass，实例 ID 与审批历史保持连续（非新建实例）。
+ */
+export function resubmitTask(cmd: TaskActionCmd): Promise<void> {
+  return put<void>('/workflow/task/resubmit', cmd);
+}
+
 /** 转办（S93）：将任务转交给目标用户 */
 export function transferTask(cmd: TaskActionCmd): Promise<void> {
   return put<void>('/workflow/task/transfer', cmd);
