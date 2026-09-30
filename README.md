@@ -1,6 +1,6 @@
 # PivotOS APP（pivotos-app）
 
-> 枢磐 PivotOS「一码三端」企业管理平台 —— uni-app 移动端（App / H5 / 微信·支付宝·抖音小程序，一套代码）
+> 筱筱框架（PivotOS）「一码三端」企业管理平台 —— uni-app 移动端（App / H5 / 微信·支付宝·抖音小程序，一套代码）
 >
 > 📖 在线文档：[pivotos-doc.293242.com](https://pivotos-doc.293242.com) ｜ 📱 H5 演示：[pivotos-h5.293242.com](https://pivotos-h5.293242.com)（账号 `admin / admin123`）
 
