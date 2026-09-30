@@ -2,8 +2,8 @@
     "name" : "PivotOS",
     "appid" : "",
     "description" : "程序员胡伟龙 PivotOS 一码三端移动端（App / H5 / 小程序）",
-    "versionName" : "2.14.0",
-    "versionCode" : "2140",
+    "versionName" : "2.15.0",
+    "versionCode" : "2150",
     "transformPx" : false,
     /* 5+App特有相关 */
     "app-plus" : {
