@@ -3,7 +3,10 @@
     <view class="brand">
       <image class="logo" src="/static/logo.png" mode="aspectFit" />
       <text class="app-name">PivotOS</text>
-      <text class="slogan">枢磐科技 · 一码三端</text>
+      <view class="slogan">
+        <text class="slogan__author" @click="openAuthorSite">程序员胡伟龙</text>
+        <text> · 一码三端</text>
+      </view>
     </view>
 
     <!-- 微信小程序：一键登录主链路；未绑定微信引导绑定 -->
@@ -122,6 +125,25 @@ async function onPhoneAuthorize(e: { detail?: { code?: string; errMsg?: string }
   await bindByPhone(code).catch(() => {});
 }
 
+/** 作者主页 */
+const AUTHOR_SITE = 'https://www.293242.com/'
+
+/** 打开作者主页：H5/App 直接跳转，小程序复制域名 */
+function openAuthorSite() {
+  // #ifdef H5
+  window.open(AUTHOR_SITE, '_blank')
+  // #endif
+  // #ifdef APP-PLUS
+  plus.runtime.openURL(AUTHOR_SITE)
+  // #endif
+  // #ifdef MP
+  uni.setClipboardData({
+    data: AUTHOR_SITE,
+    success: () => uni.showToast({ title: '主页链接已复制', icon: 'none' }),
+  })
+  // #endif
+}
+
 /** 微信端账密绑定登录 */
 async function onBindByAccount() {
   if (!validate()) return;
@@ -153,9 +175,14 @@ async function onBindByAccount() {
   color: #2c405a;
 }
 .slogan {
+  display: flex;
+  align-items: center;
   margin-top: 12rpx;
   font-size: 26rpx;
   color: #999;
+}
+.slogan__author {
+  color: #4d80f0;
 }
 .actions,
 .bind-panel,
