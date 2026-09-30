@@ -11,9 +11,14 @@
       </wd-cell-group>
 
       <wd-cell-group title="关于" border>
-        <wd-cell title="关于枢磐科技" is-link :clickable="true" @click="handleAbout">
+        <wd-cell title="关于程序员胡伟龙" is-link :clickable="true" @click="handleAbout">
           <template #icon>
             <wd-icon name="info-circle" size="18px" custom-style="margin-right: 8px" />
+          </template>
+        </wd-cell>
+        <wd-cell title="作者主页" value="www.293242.com" is-link :clickable="true" @click="handleOpenSite">
+          <template #icon>
+            <wd-icon name="link" size="18px" custom-style="margin-right: 8px" />
           </template>
         </wd-cell>
       </wd-cell-group>
@@ -33,6 +38,9 @@ import { ref } from 'vue'
 import { useMessage } from 'wot-design-uni'
 
 const message = useMessage()
+
+/** 作者主页 */
+const AUTHOR_SITE = 'https://www.293242.com/'
 
 /** 版本号与 manifest.json 同步 */
 const versionName = ref('2.0.0')
@@ -68,15 +76,33 @@ const handleClearCache = () => {
 
 const handleAbout = () => {
   const platformName = getPlatformName()
-  const appInfo = `枢磐科技 PivotOS v${versionName.value}
+  const appInfo = `PivotOS v${versionName.value}
 一码三端企业管理平台
+开发者：程序员胡伟龙
+主页：${AUTHOR_SITE}
 当前平台：${platformName}`
 
   message.alert({
-    title: '关于枢磐科技',
+    title: '关于程序员胡伟龙',
     msg: appInfo,
     confirmButtonText: '知道了',
   })
+}
+
+/** 打开作者主页：H5/App 直接跳转，小程序复制链接 */
+const handleOpenSite = () => {
+  // #ifdef H5
+  window.open(AUTHOR_SITE, '_blank')
+  // #endif
+  // #ifdef APP-PLUS
+  plus.runtime.openURL(AUTHOR_SITE)
+  // #endif
+  // #ifdef MP
+  uni.setClipboardData({
+    data: AUTHOR_SITE,
+    success: () => uni.showToast({ title: '主页链接已复制', icon: 'none' }),
+  })
+  // #endif
 }
 
 function getPlatformName(): string {
