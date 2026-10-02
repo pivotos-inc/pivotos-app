@@ -1,6 +1,6 @@
 {
   "name": "pivotos-app",
-  "version": "2.16.0",
+  "version": "2.16.1",
   "scripts": {
     "dev:custom": "uni -p",
     "dev:h5": "uni",
